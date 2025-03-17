@@ -68,7 +68,7 @@ class queues:
                         _wirte_in_anime_json(number=episode_number, url=oneupload, anime_json=anime_json)
                     else:
                         logger.error(f"Le téléchargement a échoué")
-                        sibnet = "none"
+                        oneupload = "none"
 
                 if sibnet == "none" and vidmoly == "none" and oneupload == "none" and sendvid != "none":
                     logger = logging.getLogger(f"{name} {episode_number} - Sendvid:")
@@ -80,7 +80,7 @@ class queues:
                         _wirte_in_anime_json(number=episode_number, url=sendvid, anime_json=anime_json)
                     else:
                         logger.error(f"Le téléchargement a échoué")
-                        sibnet = "none"
+                        sendvid = "none"
 
                 if sibnet == "none" and vidmoly == "none" and oneupload == "none" and sendvid == "none":
                     logger = logging.getLogger(f"{name} {episode_number}:")
