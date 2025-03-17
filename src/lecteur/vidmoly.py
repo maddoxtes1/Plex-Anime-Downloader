@@ -35,7 +35,6 @@ class SegmentDownloader:
                 for chunk in response.iter_content(chunk_size=self.chunk_size):
                     if chunk:
                         file.write(chunk)
-            print(f"Le fichier {filename} a été téléchargé avec succès.")
             return True
         except requests.exceptions.RequestException as e:
             print(f"Erreur lors du téléchargement du fichier {url}: {e}")
