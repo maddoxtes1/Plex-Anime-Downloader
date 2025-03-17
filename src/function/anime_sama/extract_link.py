@@ -7,7 +7,7 @@ import logging
 class extract_link:
     def __init__(self, episode_json, episode_js, logger):
         self.logger = logger
-        whitelist = ['video.sibnet.ru', 'vidmoly.to', 'sendvid.com']
+        whitelist = ['video.sibnet.ru', 'vidmoly.to', 'oneupload.to', 'sendvid.com']
         self.convert_json(episode_js, episode_json)
 
         self.update_domains(episode_json, whitelist)
