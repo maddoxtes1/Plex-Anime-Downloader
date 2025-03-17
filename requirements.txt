@@ -1,0 +1,6 @@
+js2py
+urllib3
+requests
+aiohttp
+beautifulsoup4
+pytz
