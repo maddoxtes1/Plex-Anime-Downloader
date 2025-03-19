@@ -14,8 +14,6 @@ class countdown_timer:
             hours, remainder = divmod(self.seconds, 3600)
             mins, secs = divmod(remainder, 60)
             timer = f'{hours:02d}:{mins:02d}:{secs:02d}'
-            sys.stdout.write(f"\rLe scan va reprendre dans {timer}")
-            sys.stdout.flush()
             time.sleep(1)
             self.seconds -= 1
         logger.info("starting traitement")
