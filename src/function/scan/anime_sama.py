@@ -27,10 +27,11 @@ class start:
                         queue.append((anime_info, new_episode, Anime_json))
 
                     for numb, link in new_episode:
-                        logger.info(f"!!!! nouveaux !!!! episode {numb}, {link}")
+                        logger.info(f"nouveaux episode detecté, episode {numb}")
                 logger.info(f"scan terminer")
             for anime_info, new_episode, Anime_json in queue:    
                 queues.add_to_queue(anime_info=anime_info, new_episode=new_episode, anime_json=Anime_json)
-                logger.info(f"scan finish")
+            logger = logging.getLogger(f"Anime-sama:")
+            logger.info(f"scan finish")
         else:
             logger.warning(f"anime.json is empty")
