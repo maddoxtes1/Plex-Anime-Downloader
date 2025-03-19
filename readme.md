@@ -1,24 +1,44 @@
+# Description 
+J'ai un serveur Plex et j'aime les animes. J'avais la flemme de downloader manuellement mes animes, du coup j'ai créé cette app Docker.
 
-I broke all the old push ;(
+## Mes idées pour le projet
 
-not finished yet, I am working on a web interface to facilitate downloading
+- ✅ Téléchargez automatiquement les animes.
+- 🔨 Avoir une interface web pour le contrôler.
+- ❌ Utiliser une extension pour ajouter des téléchargements dans la queue.
+- ❌ Pouvoir télécharger sur plusieurs sites de streaming. (pour le moment, il marche seulement avec [https://anime-sama.fr/]) 
+- ❌ Utilisation d'un VPN pour les download. (ne sera pas obligatoire, mais recommandé, sinon tu vas toujour te faire ban de sibnet)
 
-git - https://git.maddoxserv.com/maddox/DOCKER-APP_plex-anime-downloader⁠
 
-docker - maddoxtes/anime-sama_downloader
+# Requirement 
 
-need 3 path
+- docker
 
-DATA=/mnt/user/appdata/anime-downloader
 
-TEMP=/tmp/anime-downloader
+# Installation 
 
-PLEX=/mnt/user/appdata/plex
+Voici les 3 path que le docker app utilise.
 
-and to be able to download an anime go on https://anime-sama.fr/planning/⁠ select your anime and you must write this in the anime.json
+- DATA - /mnt/user/appdata/anime-downloader ⚠️
+- TEMP - /tmp/anime-downloader ✅
+- PLEX - /mnt/user/appdata/plex ⚠️
 
-exemple for this anime https://anime-sama.fr/catalogue/izure-saikyou-no-renkinjutsushi/saison1/vostfr/⁠ {"day": "mercredi","series": [{"name": "izure-saikyou-no-renkinjutsushi","season": "1","langage": "vostfr"}]},
+#### Les path ✅ tu a pas besoin de les changer, mais celles avec ⚠️ tu vas devoir les changer 
 
-If you are using beta-0.4.3 and want to update to 0.4.5 you will have to delete your anime.json file. I advise you to backup your old file to copy it into the new one.
+- DATA Tu peux le mettre ou que tu veux, mais rappelle-toi ou que tu la mis parceque tu pouras pas download des anime.
+- PLEX Ce chemin doit être votre bibliothèque de films et de séries.
 
-for each anime and anime season
+#### Après avoir pull le docker va dans (/DATA/config/config.conf), Pour changer le nom des dossier "vostfr_folder_name" et "vf_folder_name". 
+Le nom des 2 dossier dois être présent dans le path PLEX.
+
+# Utilisation 
+
+- 1 va sur https://anime-sama.fr/ et cherche un anime que tu aimerais download 
+- 2 regarde url elle dois ressembler a sa https://anime-sama.fr/catalogue/tis-time-for-torture-princess/saison1/vostfr/
+- 3 Après, tu vas dans le fichier (/DATA/config/anime.json) si c'est un anime qui se trouvait dans le planning d'anime-sama souvient toi du jour et ajoute cette ligne a série {"name": "nom-de-lanime-présent-dans-url", "season": "1", "langage": "vostfr"}, sinon recherche le jour nommé "download_all" et ajoute le dedans
+
+
+# Lien
+
+- [Git](https://git.maddoxserv.com/maddox/Plex-Anime-Downloader)
+- [Docker Image](https://hub.docker.com/r/maddoxtes/anime-sama_downloader)
