@@ -2,8 +2,8 @@ import os
 import threading
 import queue
 import logging
-import json
-import src.lecteur as downloader
+import shutil
+from src.mp4_downloader.manager import manager
 from src.function.queue.wirte_anime_json import _wirte_in_anime_json
 
 class queues:
@@ -33,59 +33,21 @@ class queues:
                 name, episode_number, episode_path, anime_json = episode_info
                 logger = logging.getLogger(f"{name} {episode_number}:")
 
-                sibnet, vidmoly, oneupload, sendvid = episode_urls
-                if sibnet != "none":
-                    logger = logging.getLogger(f"{name} {episode_number} - Sibnet:")
-                    logger.info(f"Lancement du Téléchargement")
-                    downloaders = downloader.sibnet_downloader(logger=logger, path=episode_path, url=sibnet)
-
-                    if downloaders.status == True:
-                        logger.info(f"Téléchargement terminé")
-                        _wirte_in_anime_json(number=episode_number, url=sibnet, anime_json=anime_json)
-                    else:
-                        logger.error(f"Le téléchargement a échoué")
-                        sibnet = "none"
-
-                if sibnet == "none" and vidmoly != "none":
-                    logger = logging.getLogger(f"{name} {episode_number} - Vidmoly:")
-                    logger.info(f"Lancement du Téléchargement")
-                    downloaders = downloader.vidmoly_downloader(logger=logger, download_path=self.path_list[3], name=f"{name} {episode_number}",path=episode_path, url=vidmoly)
-
-                    if downloaders.status == True:
-                        logger.info(f"Téléchargement terminé")
-                        _wirte_in_anime_json(number=episode_number, url=vidmoly, anime_json=anime_json)
-                    else:
-                        logger.error(f"Le téléchargement a échoué")
-                        vidmoly = "none"
-
-                if sibnet == "none" and vidmoly == "none" and oneupload != "none":
-                    logger = logging.getLogger(f"{name} {episode_number} - Oneupload:")
-                    logger.info(f"Lancement du Téléchargement")
-                    downloaders = downloader.oneupload_downloader(logger=logger, download_path=self.path_list[3], name=f"{name} {episode_number}",path=episode_path, url=oneupload)
-
-                    if downloaders.status == True:
-                        logger.info(f"Téléchargement terminé")
-                        _wirte_in_anime_json(number=episode_number, url=oneupload, anime_json=anime_json)
-                    else:
-                        logger.error(f"Le téléchargement a échoué")
-                        oneupload = "none"
-
-                if sibnet == "none" and vidmoly == "none" and oneupload == "none" and sendvid != "none":
-                    logger = logging.getLogger(f"{name} {episode_number} - Sendvid:")
-                    logger.info(f"Lancement du Téléchargement")
-                    downloaders = downloader.sendvid_downloader(logger=logger, path=episode_path, url=sendvid)
-
-                    if downloaders.status == True:
-                        logger.info(f"Téléchargement terminé")
-                        _wirte_in_anime_json(number=episode_number, url=sendvid, anime_json=anime_json)
-                    else:
-                        logger.error(f"Le téléchargement a échoué")
-                        sendvid = "none"
-
-                if sibnet == "none" and vidmoly == "none" and oneupload == "none" and sendvid == "none":
-                    logger = logging.getLogger(f"{name} {episode_number}:")
-                    logger.info(f"Téléchargement anuller pas de downloader touver")
-                
+                for url in episode_urls:
+                    if url != "none":
+                        logger.info(f"Téléchargement commencé")
+                        download_manager = manager(download_path=self.path_list[3], url=url)
+                        if download_manager.status == True:
+                            file_path = download_manager.file_name
+                            if os.path.exists(file_path):
+                                try:
+                                    shutil.move(file_path, episode_path)
+                                    logger.info(f"Téléchargement terminé")
+                                    break
+                                except Exception as e:
+                                    logger.error(f"Erreur lors du déplacement du fichier: {e}")
+                                    
+                _wirte_in_anime_json(number=episode_number, url=url, anime_json=anime_json)
                 self.download_queue.task_done()
             except queue.Empty:
                 continue
