@@ -1,3 +1,4 @@
 test_file/
-start_docker.bat
+docker-compose.yml
+app/
 readme.md
