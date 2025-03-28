@@ -1,7 +1,6 @@
 test_file/
 test_files/
 docker-compose.yml
-src/
 temps_app.py
 database.json
 dockerfile.temps
