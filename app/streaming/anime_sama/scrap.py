@@ -28,17 +28,13 @@ class build_url:
     
     def execute(self):
         try:
-            self.logger.info(f"Tentative de lecture du fichier {self.anime_json}")
             with open(self.anime_json, 'r') as file:
                 data = json.load(file)
 
             anime_info = []
             for entry in data:
                 # Vérifier si l'entrée a un format valide
-                if not isinstance(entry, dict):
-                    continue
-
-                if "anime_sama" not in entry:
+                if not isinstance(entry, dict) or "anime_sama" not in entry:
                     continue
 
                 anime_sama_data = entry["anime_sama"]
@@ -59,7 +55,6 @@ class build_url:
                         continue
 
                     if day is None:
-                        self.logger.warning(f"Entrée invalide, jour manquant : {day_entry}")
                         continue
 
                     if day == self.france_time or day in ["no_day", "single_download"]:
