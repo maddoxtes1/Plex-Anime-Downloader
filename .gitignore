@@ -1,3 +1,7 @@
 test_file/
+test_files/
 docker-compose.yml
-app/
+src/
+temps_app.py
+database.json
+dockerfile.temps

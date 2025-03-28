@@ -1,6 +1,5 @@
-js2py
-urllib3
-requests
-aiohttp
-beautifulsoup4
-pytz
+urllib3==2.2.1
+requests==2.31.0
+aiohttp==3.9.3
+beautifulsoup4==4.12.3
+pytz==2025.1
