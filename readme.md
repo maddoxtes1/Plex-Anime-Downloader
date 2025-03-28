@@ -22,8 +22,9 @@ Voici les path que le docker app utilise.
 - DATA - /mnt/user/appdata/anime-downloader ⚠️ Tu peux le mettre ou que tu veux, mais rappelle-toi ou que tu la mis parceque tu pouras pas download des anime.
 - PLEX - /mnt/user/appdata/plex ⚠️ Ce chemin doit être votre bibliothèque de films ou séries de plex.
 
-#### Après avoir pull le docker va dans (/DATA/config/config.conf), Pour changer le nom des dossier "vostfr_folder_name" et "vf_folder_name". 
-Le nom des 2 dossier dois être présent dans le path PLEX.
+#### Après avoir pull le docker va dans (/DATA/config/). 
+Si tu ne modifie pas les 3 fichier present dans /DATA/config/ le script ne marchera pas.
+
 
 # Utilisation 
 
