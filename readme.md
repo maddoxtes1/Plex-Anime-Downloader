@@ -17,16 +17,10 @@ J'ai un serveur Plex et j'aime les animes. J'avais la flemme de downloader manue
 
 # Installation 
 
-Voici les 3 path que le docker app utilise.
+Voici les path que le docker app utilise.
 
-- DATA - /mnt/user/appdata/anime-downloader ⚠️
-- TEMP - /tmp/anime-downloader ✅
-- PLEX - /mnt/user/appdata/plex ⚠️
-
-#### Les path ✅ tu a pas besoin de les changer, mais celles avec ⚠️ tu vas devoir les changer 
-
-- DATA Tu peux le mettre ou que tu veux, mais rappelle-toi ou que tu la mis parceque tu pouras pas download des anime.
-- PLEX Ce chemin doit être votre bibliothèque de films et de séries.
+- DATA - /mnt/user/appdata/anime-downloader ⚠️ Tu peux le mettre ou que tu veux, mais rappelle-toi ou que tu la mis parceque tu pouras pas download des anime.
+- PLEX - /mnt/user/appdata/plex ⚠️ Ce chemin doit être votre bibliothèque de films ou séries de plex.
 
 #### Après avoir pull le docker va dans (/DATA/config/config.conf), Pour changer le nom des dossier "vostfr_folder_name" et "vf_folder_name". 
 Le nom des 2 dossier dois être présent dans le path PLEX.
