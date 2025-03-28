@@ -1,27 +1,23 @@
-import logging
-import src.function as Function
+from app.sys.check_sys import check_sys
+from app.sys.logger import sys_logger
+from app.queue.manager import queues
+from app.streaming.manager import streaming_manager
+from app.sys.function import init_path
 
-
-class app:
+class apps:
     def __init__(self):
-        system = Function.check_sys_file()
-        path_list = system.path_list
-        plex_list = system.plex_list
-        logger = logging.getLogger(f"Starting:")
+        system = check_sys()
+        
+        # Initialiser les loggers
+        sys_log = sys_logger()
 
-        logger.info(msg="initialisation de la queue...")
-        queues = Function.Queue.queues(path_list=path_list, plex_list=plex_list, file_template=system.file_template, folder_template=system.folder_template, nombre_threads=system.settings_list[1])
+        init_path(plex_path_json=system.plex_path_file)
 
+        sys_log.info(msg="initialisation de la queue...")
+        queue_manager = queues(nombre_threads=system.threads, download_path=system.download_path)
 
-        while True:
-            logger.info(msg="initialisation du scan...")
-            Function.Scan.scan(scan_option=system.scan_option_list, queues=queues, path_list=path_list)
-            Function.countdown_timer(seconds=system.settings_list[2])
-
-
-
-
-
+        sys_log.info(msg="initialisation des site de streamings...")
+        streaming_manager(queue=queue_manager, download_path=system.download_path, plex_path=system.plex_path, anime_json=system.anime_json, scan_option=system.scan_option_list, timer=system.timer)
 
 if __name__ == "__main__":
-    app()
+    apps()

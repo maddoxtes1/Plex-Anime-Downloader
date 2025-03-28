@@ -11,7 +11,6 @@ RUN apt-get update && apt-get install -y \
 ENV PYTHONUNBUFFERED=1
 
 ENV DATA=/mnt/user/appdata/anime-downloader
-ENV TEMP=/tmp/anime-downloader
 ENV PLEX=/mnt/user/appdata/plex
 
 WORKDIR /app
@@ -21,8 +20,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app
 
-# Vérifier le contenu du fichier anime.json
-RUN echo "=== Contenu de anime.json ===" && \
-    cat /mnt/user/appdata/anime-downloader/config/anime.json || echo "Fichier non trouvé"
-
-CMD ["python", "app.py"]
+CMD ["python", "temps_app.py"]
