@@ -36,4 +36,4 @@ Le nom des 2 dossier dois être présent dans le path PLEX.
 
 - [Github](https://github.com/maddoxtes1/Plex-Anime-Downloader)
 - [Gitea](https://git.maddoxserv.com/maddox/Plex-Anime-Downloader)
-- [Docker Hub](https://hub.docker.com/r/maddoxtes/anime-sama_downloader)
+- [Docker Hub](https://hub.docker.com/r/maddoxtes/plex-anime-downloader)
