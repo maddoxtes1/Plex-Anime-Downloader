@@ -16,38 +16,13 @@ class mp4_downloader:
             http = urllib3.PoolManager()
             urllib3_logger = logging.getLogger("urllib3")
             urllib3_logger.setLevel(logging.WARNING)
-            start_byte = os.path.getsize(file_name) if os.path.exists(file_name) else 0
-            headers["Range"] = f"bytes={start_byte}-"
 
             response = http.request('GET', url, headers=headers, preload_content=False)
-            if response.status == 200:
-                self.logger.info("Téléchargement complet (HTTP 200).")
-                start_byte = 0
-            elif response.status == 206:
-                self.logger.info("Reprise du téléchargement (HTTP 206).")
-            elif response.status == 416:
-                self.logger.warning("Plage invalide, tentative de téléchargement complet.")
-                if os.path.exists(file_name):
-                    os.remove(file_name)
-                self.logger.info(f"Fichier local {file_name} supprimé.")
-                headers.pop("Range", None) 
-                response = http.request("GET", url, headers=headers, preload_content=False)
-                if response.status != 200:
-                    self.logger.error(f"Erreur HTTP {response.status} après tentative de téléchargement complet.")
-                    return
-            else:
+            if response.status != 200:
                 self.logger.error(f"Erreur HTTP {response.status} pour l'URL {url}")
                 return
             
-            content_range = response.headers.get("Content-Range")
-            if content_range:
-                total_size = int(content_range.split("/")[-1])
-                if start_byte >= total_size:
-                    self.logger.info(f"Le fichier est déjà complet. Aucun téléchargement nécessaire.")
-                    self.status = True
-                    return
-                
-            with open(file_name, "ab") as f:
+            with open(file_name, "wb") as f:
                 block_size = 512 * 1024
 
                 total_bytes = 0
@@ -56,7 +31,6 @@ class mp4_downloader:
                 for data in response.stream(block_size):
                     f.write(data)
                     total_bytes += len(data)
-
 
                     elapsed_time = time.time() - start_time
                     if elapsed_time > 1:  # On ajuste toutes les secondes

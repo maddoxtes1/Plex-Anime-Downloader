@@ -13,7 +13,7 @@ class manager:
             self.logger = logging.getLogger("Download Manager")
         else:
             self.logger = logger
-        site = {"video.sibnet.ru": self.sibnet, "vidmoly.to": self.vidmoly, "oneupload.to": self.oneupload, "sendvid.com": self.sendvid}
+        site = {"video.sibnet.ru": self.sibnet, "sendvid.com": self.sendvid}
         self.download_path = download_path
         self.url = url
         self.status = False
