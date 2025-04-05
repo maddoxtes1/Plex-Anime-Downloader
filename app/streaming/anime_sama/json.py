@@ -42,7 +42,7 @@ class extract_link:
             js_content = js_file.read()
         
         if js_content.strip().startswith("/*") and js_content.strip().endswith("*/"):
-            self.logger.info(msg="Le fichier est un commentaire multi-ligne. Ignoré.")
+            self.logger.debug(msg="Le fichier est un commentaire multi-ligne. Ignoré.")
             return
         
         pattern = r"var\s+(\w+)\s*=\s*\[([^\]]+)\];"
