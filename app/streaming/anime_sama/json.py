@@ -27,7 +27,7 @@ def get_unistalled_episode(path_list):
 class extract_link:
     def __init__(self, path_list, episode_js):
         self.logger = universal_logger(name="Anime-sama", log_file="anime-sama.log")
-        whitelist = ['video.sibnet.ru', 'vidmoly.to', 'oneupload.to', 'sendvid.com']
+        whitelist = ['video.sibnet.ru', 'oneupload.to', 'vidmoly.to', 'sendvid.com']
 
         path_name, serie_name, season_name = path_list
 
