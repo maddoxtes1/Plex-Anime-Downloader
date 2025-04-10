@@ -4,9 +4,9 @@ J'ai un serveur Plex et j'aime les animes. J'avais la flemme de downloader manue
 ## Mes idées pour le projet
 
 - ✅ Téléchargez automatiquement les animes.
-- 🔨 Avoir une interface web pour le contrôler.
+- ❌ Avoir une interface web pour le contrôler.
 - ❌ Utiliser une extension pour ajouter des téléchargements dans la queue.
-- ❌ Pouvoir télécharger sur plusieurs sites de streaming. (pour le moment, il marche seulement avec [https://anime-sama.fr/]) 
+- 🔨 Pouvoir télécharger sur plusieurs sites de streaming. (pour le moment, il marche seulement avec [https://anime-sama.fr/]) 
 - ❌ Utilisation d'un VPN pour les download. (ne sera pas obligatoire, mais recommandé, sinon tu vas toujour te faire ban de sibnet)
 
 
