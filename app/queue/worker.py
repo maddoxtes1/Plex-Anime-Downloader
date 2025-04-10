@@ -15,10 +15,10 @@ def _worker(download_queue, download_path):
             episode_path, path_name, serie_name, season_name = path
             logger = logging.getLogger(f"{episode_name}:")
             status = False
+            logs = universal_logger(name=f"{episode_name}:", log_file="download.log")
+            logs.info(f"Téléchargement commencé")
             for url in episode_urls:
                 if url != "none":
-                    logs = universal_logger(name=f"{episode_name}:", log_file="download.log")
-                    logs.info(f"Téléchargement commencé")
                     downloader = mp4mdl(download_path=download_path, final_path=episode_path, url=url, logger=logs)
                     download_status = downloader.download()
                     if download_status == True:
@@ -34,4 +34,4 @@ def _worker(download_queue, download_path):
         except queue.Empty:
             continue
         except Exception as e:
-            logger.error(f"Erreur inattendue dans le gestionnaire de queue : file-{episode_name}, error-{e}")
+            logger.error(f"Erreur inattendue dans le worker: {e}")
