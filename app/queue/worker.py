@@ -3,7 +3,7 @@ import os
 import shutil
 import queue
 
-from ..mp4_downloader.manager import manager
+from mp4mdl import mp4mdl
 from ..sys.database import database
 from ..sys.logger import queue_logger, universal_logger
 
@@ -19,29 +19,13 @@ def _worker(download_queue, download_path):
                 if url != "none":
                     logs = universal_logger(name=f"{episode_name}:", log_file="download.log")
                     logs.info(f"Téléchargement commencé")
-                    download_manager = manager(download_path=download_path, url=url, logger=logs)
-                    if download_manager.status == True:
-                        file_path = download_manager.file_name
-                        if os.path.exists(file_path):
-                            try:
-                                # Exemple: '/path/to/episode.mp4' -> '/path/to'
-                                if not os.path.exists(os.path.dirname(episode_path)):
-                                    os.makedirs(os.path.dirname(episode_path))
-                                shutil.move(file_path, episode_path)
-                                logs.info(f"Téléchargement terminé")
-                                status = True
-                                break
-                            except Exception as e:
-                                logger.error(f"Erreur lors du déplacement du fichier: file-{episode_name}, error-{e}")
-                                continue
-                        else:
-                            logger.error(f"Erreur lors du téléchargement du fichier: file-{episode_name}, error-{e}")
-                            continue
-                    else:
-                        logger.error(f"Erreur lors du téléchargement du fichier: file-{episode_name}, error-{e}")
-                        continue
-                    
+                    downloader = mp4mdl(download_path=download_path, final_path=episode_path, url=url, logger=logs)
+                    download_status = downloader.download()
+                    if download_status == True:
+                        status = True
+                        break
             if status == True:
+                logs.info(f"Téléchargement Terminé")
                 db = database()
                 db.update_episode(path_name=path_name, series_name=serie_name, season_name=season_name, episode_list=(episode_name, "downloaded", episode_urls))
             else:

@@ -1,5 +1,5 @@
-urllib3==2.2.1
-requests==2.31.0
+MP4MDL==0.1.2
 aiohttp==3.9.3
-beautifulsoup4==4.12.3
 pytz==2025.1
+requests==2.31.0
+beautifulsoup4==4.12.3
