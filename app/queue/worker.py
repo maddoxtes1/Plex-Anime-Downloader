@@ -19,8 +19,7 @@ def _worker(download_queue, download_path):
             logs.info(f"Téléchargement commencé")
             for url in episode_urls:
                 if url != "none":
-                    if not os.path.exists(os.path.dirname(episode_path)):
-                        os.makedirs(os.path.dirname(episode_path))
+                    os.makedirs(os.path.dirname(episode_path), exist_ok=True)
                     downloader = mp4mdl(download_path=download_path, final_path=episode_path, url=url, logger=logs)
                     download_status = downloader.download()
                     if download_status == True:
