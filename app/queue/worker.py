@@ -1,6 +1,5 @@
 import logging
 import os
-import shutil
 import queue
 
 from mp4mdl import mp4mdl
