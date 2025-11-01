@@ -119,4 +119,13 @@ class database:
             for episode_name, episode_data in data[path_name][series_name][season_name].items():
                 episodes.append((episode_name, episode_data["status"], episode_data["url"]))
         return episodes
-
+    
+    def get_unistalled_episode(self, path_list):
+        path_name, series_name, season_name = path_list
+        data = self._read_database()
+        episodes = []
+        if self._verify_season(data, path_name, series_name, season_name):
+            for episode_name, episode_data in data[path_name][series_name][season_name].items():
+                if episode_data["status"] == "not_downloaded":
+                    episodes.append((episode_name, episode_data["url"]))
+        return episodes
