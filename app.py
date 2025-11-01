@@ -1,8 +1,6 @@
-from app.sys.check_sys import check_sys
-from app.sys.logger import sys_logger
+from app.sys import check_sys, sys_logger, init_path
 from app.queue.manager import queues
 from app.streaming.manager import streaming_manager
-from app.sys.function import init_path
 
 class apps:
     def __init__(self):
