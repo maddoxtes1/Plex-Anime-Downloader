@@ -24,6 +24,7 @@ class check_sys:
         self.download_path = os.path.join(self.data_path, "download")
         create_path(path=self.download_path)
         create_path(path=os.path.join(self.download_path, "episode"))
+        create_path(path=os.path.join(self.download_path, "json"))
         self.logger.info("Download path Loaded/created")
 
         self.database_path = os.path.join(self.data_path, "database")
@@ -58,8 +59,8 @@ class check_sys:
             config.add_section('scan-option')
             config.set('scan-option', '# Options de scan : active ou désactive les scan sur les sites')
             config.set('scan-option', 'anime-sama', 'True')
-            config.set('scan-option', '#anime-fr est pas encore dev donc il ne marche pas mais jai prevue de le rajouter')
-            config.set('scan-option', 'anime-fr', 'False')
+            config.set('scan-option', '#franime est pas encore dev donc il ne marche pas mais jai prevue de le rajouter')
+            config.set('scan-option', 'franime', 'False')
             with open(config_file, 'w') as configfile:
                 config.write(configfile)
             self.logger.info("Fichier de configuration créé")
@@ -69,7 +70,7 @@ class check_sys:
         
         self.threads = int(config.get('settings', 'threads'))
         self.timer = int(config.get('settings', 'timer'))
-        self.scan_option_list = [bool(config['scan-option']['anime-sama']), bool(config['scan-option']['anime-fr'])]
+        self.scan_option_list = [bool(config['scan-option']['anime-sama']), bool(config['scan-option']['franime'])]
         
         self.config = config_file
         
@@ -77,25 +78,19 @@ class check_sys:
         anime_json = f"{self.config_path}/anime.json"
         if not os.path.exists(anime_json):
             data = [
-                {"anime_sama": [
-                    {"_comment": "pour les jour de la semaine allez dans la planning et ajouter les anime que vous voulez downloader au jour voulu (ses pour ne pas trop spammer les server d'anime-sama)"},
-                    {"_comment": "pour ajouter un anime vous devez faire comme sa {name: nom-de-lanime, season:le numero de la saison, langage: le langage de la saison que vous voulez download}"},
-                    {"_comment": "ne pas oublier de se fier a url de la serie que vous voulez downloader"},
-                    {"day": "lundi","series": []},
-                    {"day": "mardi","series": []},
-                    {"day": "mercredi","series": []},
-                    {"day": "jeudi","series": []},
-                    {"day": "vendredi","series": []},
-                    {"day": "samedi","series": []},
-                    {"day": "dimanche","series": []},
-                    {"day": "no_day","series": []},
-                    {"day": "single_download","series": []}
-                ]},
-                {"franime": [
-                    {"_comment": "pour le moment anime-fr est pas encore dev donc il ne marche pas mais je sais comment pour pouvoir download desus"},
-                    {"auto_download": {"series": []}},
-                    {"single_download": {"series": []}},
-                ]}
+                {
+                    "auto_download": {
+                        "lundi": [{"name": "none", "season": "none", "langage": "none", "streaming": "none", "file_name": "none"}],
+                        "mardi": [],
+                        "mercredi": [],
+                        "jeudi": [],
+                        "vendredi": [],
+                        "samedi": [],
+                        "dimanche": [],
+                        "no_day": []
+                        },
+                    "single_download": []
+                }
             ]
             with open(anime_json, 'w', encoding='utf-8') as json_file:
                 json.dump(data, json_file, indent=4, ensure_ascii=False)
