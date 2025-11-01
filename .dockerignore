@@ -1,5 +1,11 @@
 test_file/
 test_files/
 docker-compose.yml
-readme.md
+temps_app.py
 database.json
+dockerfile.temps
+pull_command
+AFAIRE.txt
+franime.log
+franime.py
+franime_api.py
