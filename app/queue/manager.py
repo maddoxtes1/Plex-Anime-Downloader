@@ -2,7 +2,7 @@ import threading
 import queue
 
 from .worker import _worker
-from ..sys.logger import queue_logger
+from ..sys import queue_logger
 
 class queues:
     def __init__(self, nombre_threads, download_path):
