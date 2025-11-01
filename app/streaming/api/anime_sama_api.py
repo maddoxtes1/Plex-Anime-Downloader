@@ -1,28 +1,36 @@
+import requests
 import re
-from collections import Counter
 from urllib.parse import urlparse
+from collections import Counter
 
 from ...sys.logger import universal_logger
 from ...sys.database import database
 
-
-def get_unistalled_episode(path_list):
-    path_name, serie_name, season_name = path_list
-    logger = universal_logger(name="Anime-sama", log_file="anime-sama.log")
-
-    db = database()
-
-    episodes = db.get_episode(
-        path_name=path_name,
-        series_name=serie_name,
-        season_name=season_name
-    )
-
-    new_entries = []
-    for episode_name, episode_status, episode_url in episodes:
-        if episode_status == "not_downloaded":
-            new_entries.append((episode_name, episode_url))
-    return new_entries
+def find_episode(anime_name, anime_url, episode_js):
+    logger = universal_logger(name=f"Anime-sama - {anime_name}", log_file="anime-sama.log")
+    try:
+        response = requests.get(anime_url, stream=True)
+        response.raise_for_status()
+            
+        if response.status_code == 200:
+            with open(episode_js, 'wb') as file:
+                file.write(response.content)
+            return True 
+        else:
+            logger.warning(f"url not work")
+            return False    
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Erreur de connexion : {e}")
+        return False
+    except requests.exceptions.Timeout:
+        logger.error(f"Délai d'attente dépassé.")
+        return False
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Erreur lors de la requête : {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Erreur : {e}")
+        return False
 
 class extract_link:
     def __init__(self, path_list, episode_js):
