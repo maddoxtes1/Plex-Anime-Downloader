@@ -29,9 +29,11 @@ class anime_sama:
         return path_name, path_list, episode_js, season_name, folder_name
 
     def run(self):
-        path_name, path_list, episode_js, season_name, folder_name = self.get_path()
-        if path_name is None:
+        path_result = self.get_path()
+        if path_result is None:
             return
+        
+        path_name, path_list, episode_js, season_name, folder_name = path_result
         
         # Vérifier si anime_url est une liste
         if isinstance(self.anime_url, list):
