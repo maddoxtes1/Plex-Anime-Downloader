@@ -2,7 +2,7 @@ import time
 import pytz
 from datetime import datetime
 import json
-
+import re
 
 from ..sys.logger import sys_logger
 from ..sys.logger import universal_logger
@@ -109,8 +109,7 @@ class streaming_manager:
             Anime_Sama, FR_Anime = self.scan_option 
 
             anime_sama_list, franime_list = self.get_anime()
-            print(anime_sama_list)
-            print(franime_list)
+            franime_list = False # remove this line when franime is ready
 
             if Anime_Sama == True:
                 self.logger.info(msg="Anime-Sama scan started")
@@ -119,18 +118,54 @@ class streaming_manager:
                     queue_list = []
                     for anime in anime_sama_list:
                         name, season, langage, file_name = anime
-                        url = f"https://anime-sama.org/catalogue/{name}/saison{season}/{langage}/episodes.js"
                         if file_name == "none":
                             file_name = name
-                        AS = anime_sama(anime_name=file_name, anime_url=url, anime_season=season, anime_langage=langage, plex_path=self.plex_path, download_path=self.download_path)
-                        queue = AS.run()
-                        if queue:
-                            queue_list.append(queue)
+                        
+                        # Vérifier si season est au format "x-y" (ex: "1-2", "1-3", "3-2")
+                        part_season_pattern = r'^\d+-\d+$'
+                        if re.match(part_season_pattern, str(season)):
+                            # Extraire le début et la fin
+                            season_parts = season.split('-')
+                            season_base = int(season_parts[0])  # Premier nombre (toujours utilisé comme base)
+                            nombre_parts = int(season_parts[1])  # Deuxième nombre (nombre de parts à créer)
+                            
+                            # Créer une liste d'URLs numérotées (1, 2, 3, 4, 5, etc.)
+                            # Exemple: 1-3 → base=1, nombre_parts=3 → génère: saison1, saison1-2, saison1-3
+                            # Exemple: 3-2 → base=3, nombre_parts=2 → génère: saison3, saison3-2
+                            url_list = []
+                            for current_season in range(1, nombre_parts + 1):
+                                if current_season == 1:
+                                    # Si c'est la première itération, utiliser juste saison{base} (sans -1)
+                                    url = f"https://anime-sama.org/catalogue/{name}/saison{season_base}/{langage}/episodes.js"
+                                    season_for_object = season_base
+                                else:
+                                    # Sinon, utiliser saison{base}-{current_season}
+                                    url = f"https://anime-sama.org/catalogue/{name}/saison{season_base}-{current_season}/{langage}/episodes.js"
+                                    season_for_object = f"{season_base}-{current_season}"
+                                
+                                # Ajouter à la liste avec un numéro (1, 2, 3, etc.)
+                                url_list.append(url)
+                            
+                            # Traiter avec la liste d'URLs (utiliser season_base comme season_for_object)
+                            AS = anime_sama(anime_name=file_name, anime_url=url_list, anime_season=season_base, anime_langage=langage, plex_path=self.plex_path, download_path=self.download_path)
+                            queue = AS.run()
+                            if queue:
+                                queue_list.append(queue)
+                            else:
+                                log.warning(f"{name} saisons {nombre_parts} n'ont pas été trouvées")
                         else:
-                            log.warning(f"{name} n'a pas été trouvé")
+                            # Si ce n'est pas un format de plage, traiter normalement
+                            url = f"https://anime-sama.org/catalogue/{name}/saison{season}/{langage}/episodes.js"
+                            AS = anime_sama(anime_name=file_name, anime_url=url, anime_season=season, anime_langage=langage, plex_path=self.plex_path, download_path=self.download_path)
+                            queue = AS.run()
+                            if queue:
+                                queue_list.append(queue)
+                            else:
+                                log.warning(f"{name} n'a pas été trouvé")
                     for queue in queue_list:
                         for episode_name, path, episode_url in queue:
                             self.queue.add_to_queue(episode_name=episode_name, path=path, episode_urls=episode_url)
+            self.timer(seconds=self.seconds)
         """    if FR_Anime == True:
                 self.logger.info(msg="FRAnime scan started")
                 log = universal_logger(name="FRAnime", log_file="franime.log")

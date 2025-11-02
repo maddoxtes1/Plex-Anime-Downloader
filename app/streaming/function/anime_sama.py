@@ -2,7 +2,7 @@ import os
 
 from ...sys.logger import universal_logger
 from ...sys.function import get_path
-from ..api import find_episode, extract_link
+from ..api import find_episode, extract_link, extract_all_part_episode
 from ...sys.database import database
 
 class anime_sama:
@@ -33,11 +33,23 @@ class anime_sama:
         if path_name is None:
             return
         
-        status = find_episode(anime_name=self.anime_name, anime_url=self.anime_url, episode_js=episode_js)
-        if status == False:
-            return
-        
-        extract_link(path_list=path_list, episode_js=episode_js)
+        # Vérifier si anime_url est une liste
+        if isinstance(self.anime_url, list):
+            # Traiter chaque URL de la liste
+            episode_js_list = []
+            for i, (url) in enumerate(self.anime_url): 
+                episode_js_part = f"{self.download_path}/episode/{self.anime_name}-s{self.anime_season}-part{i+1}.js"
+                status = find_episode(anime_name=self.anime_name, anime_url=url, episode_js=episode_js_part)
+                if status == False:
+                    continue
+                episode_js_list.append(episode_js_part)
+            extract_all_part_episode(path_list=path_list, episode_js_list=episode_js_list)
+        else:
+            # Traiter l'URL unique
+            status = find_episode(anime_name=self.anime_name, anime_url=self.anime_url, episode_js=episode_js)
+            if status == False:
+                return
+            extract_link(path_list=path_list, episode_js=episode_js)
 
         db = database()
         uninstalled = db.get_unistalled_episode(path_list=path_list)
