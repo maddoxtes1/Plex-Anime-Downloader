@@ -4,33 +4,39 @@ J'ai un serveur Plex et j'aime les animes. J'avais la flemme de downloader manue
 ## Mes idées pour le projet
 
 - ✅ Téléchargez automatiquement les animes.
-- ❌ Avoir une interface web pour le contrôler.
-- ❌ Utiliser une extension pour ajouter des téléchargements dans la queue.
-- 🔨 Pouvoir télécharger sur plusieurs sites de streaming. (pour le moment, il marche seulement avec [https://anime-sama.fr/]) 
-- ❌ Utilisation d'un VPN pour les download. (ne sera pas obligatoire, mais recommandé, sinon tu vas toujour te faire ban de sibnet)
+- 🔨 controller app avec une extention web.
+- ❌ Pouvoir télécharger sur plusieurs sites de streaming. (pour le moment, il marche seulement avec [https://anime-sama.org/]) 
+- ❌ support d'un vpn pour les download.
 
 
 # Requirement 
 
 - docker
 
+⚠️ si tu a une bibliotech jellyfin tu vas surment avoir des probleme avec la detection des anime 
+
+jai fait un petit docker qui peut run h24 qui permet de cree automatiquement le nfo se qui rend la detection des anime/episode plus simple ses pas parfait mais sa aide beaucoup [lien-nfo-watcher](https://hub.docker.com/repository/docker/maddoxtes/jellyfin-nfo-watcher/general)
+
+
 
 # Installation 
 
-Voici les path que le docker app utilise.
+- 1 docker pull maddoxtes/plex-anime-downloader:tagname
 
-- DATA - /mnt/user/appdata/anime-downloader ⚠️ Tu peux le mettre ou que tu veux, mais rappelle-toi ou que tu la mis parceque tu pouras pas download des anime.
-- PLEX - /mnt/user/appdata/plex ⚠️ Ce chemin doit être votre bibliothèque de films ou séries de plex.
+- 2 Voici les path que le docker app utilise.
+    - DATA - /mnt/user/appdata/anime-downloader ⚠️ Tu peux le mettre ou que tu veux, mais rappelle-toi ou que tu la mis parceque tu pouras pas download des anime.
+    - PLEX - /mnt/user/appdata/plex ⚠️ Ce chemin doit être votre bibliothèque de films ou séries de plex.
 
-#### Après avoir pull le docker va dans (/DATA/config/). 
-Si tu ne modifie pas les 3 fichier present dans /DATA/config/ le script ne marchera pas.
+- 3 modifie le fichier plex_path.json il est present dans /DATA/config/ sinon le script ne marchera pas.
+
+- 4 modifie le fichier anime.json pour ajouter des anime dans ta bibliotech plex/jellyfin/offline download 
 
 
-# Utilisation 
 
-- 1 va sur https://anime-sama.fr/ et cherche un anime que tu aimerais download 
-- 2 regarde url elle dois ressembler a sa https://anime-sama.fr/catalogue/tis-time-for-torture-princess/saison1/vostfr/
-- 3 Après, tu vas dans le fichier (/DATA/config/anime.json) si c'est un anime qui se trouvait dans le planning d'anime-sama souvient toi du jour et ajoute cette ligne a série {"name": "nom-de-lanime-présent-dans-url", "season": "1", "langage": "vostfr"}, sinon recherche le jour nommé "download_all" et ajoute le dedans
+# tutorial
+
+[link]()
+
 
 
 # Lien
