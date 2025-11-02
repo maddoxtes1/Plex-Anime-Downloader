@@ -13,7 +13,7 @@ J'ai un serveur Plex et j'aime les animes. J'avais la flemme de downloader manue
 
 - docker
 
-⚠️ si tu a une bibliotech jellyfin tu vas surment avoir des probleme avec la detection des anime 
+⚠️ si tu a une bibliotheque jellyfin tu vas surment avoir des probleme avec la detection des anime 
 
 jai fait un petit docker qui peut run h24 qui permet de cree automatiquement le nfo se qui rend la detection des anime/episode plus simple ses pas parfait mais sa aide beaucoup [lien-nfo-watcher](https://hub.docker.com/repository/docker/maddoxtes/jellyfin-nfo-watcher/general)
 
