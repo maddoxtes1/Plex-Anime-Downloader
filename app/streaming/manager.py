@@ -152,7 +152,7 @@ class streaming_manager:
                             if queue:
                                 queue_list.append(queue)
                             else:
-                                log.warning(f"{name} saisons {nombre_parts} n'ont pas été trouvées")
+                                log.info(f"{name} tous les épisodes sont déjà installés ou aucun nouveau épisode disponible")
                         else:
                             # Si ce n'est pas un format de plage, traiter normalement
                             url = f"https://anime-sama.org/catalogue/{name}/saison{season}/{langage}/episodes.js"
@@ -161,7 +161,7 @@ class streaming_manager:
                             if queue:
                                 queue_list.append(queue)
                             else:
-                                log.warning(f"{name} n'a pas été trouvé")
+                                log.info(f"{name} tous les épisodes sont déjà installés ou aucun nouveau épisode disponible")
                     for queue in queue_list:
                         for episode_name, path, episode_url in queue:
                             self.queue.add_to_queue(episode_name=episode_name, path=path, episode_urls=episode_url)
