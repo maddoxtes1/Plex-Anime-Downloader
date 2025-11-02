@@ -44,3 +44,4 @@ jai fait un petit docker qui peut run h24 qui permet de cree automatiquement le 
 - [Github](https://github.com/maddoxtes1/Plex-Anime-Downloader)
 - [Gitea](https://git.maddoxserv.com/maddox/Plex-Anime-Downloader)
 - [Docker Hub](https://hub.docker.com/r/maddoxtes/plex-anime-downloader)
+- [Patch-note](https://git.maddoxserv.com/maddox/Plex-Anime-Downloader/releases)
