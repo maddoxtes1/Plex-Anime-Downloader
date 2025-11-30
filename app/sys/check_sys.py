@@ -103,7 +103,9 @@ class check_sys:
         plex_path_file = f"{self.config_path}/plex_path.json"
         if not os.path.exists(plex_path_file):
             data_json = [
-                {"_comment": "vous pouvez modifier le langage des dossier vous ne pouvez pas avoir un dossier qui a le même langage qu'un autre dossier"},
+                {"_comment": "se fichier de configuration detecte automatiquement les dossier qui son present dans ton path plex"}
+                {"_comment": "si tu vois pas de configuration assure toi de avoir mis le bon path et que dans se pas il aille des dossier"}
+                {"_comment": "vous pouvez modifier le langage des dossier parcontre vous ne pouvez pas avoir un dossier qui a le même langage qu'un autre dossier"},
                 {"_comment": "voci tout les langage possible pour le moment: vostfr, va, vf, vkr, vcn, vqc, vf1, vf2, vj,"},
                 {"_comment": "vous etes pas obliger de metre tout les langage possible vous pouvez en metre que un ou deux"},
             ]
