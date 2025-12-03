@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Flask Auth Client</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 12px;
+      width: 320px;
+      background: #f3f4f6;
+    }
+    h1, h2 {
+      font-size: 1.1rem;
+      margin: 0 0 8px;
+    }
+    .section {
+      background: white;
+      border-radius: 10px;
+      padding: 12px;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
+      margin-bottom: 10px;
+    }
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 4px;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      margin-bottom: 8px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+      font-size: 0.9rem;
+    }
+    button {
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: none;
+      background: #2563eb;
+      color: white;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #6b7280;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .small {
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
+    .error {
+      color: #b91c1c;
+      font-size: 0.8rem;
+      margin-top: 4px;
+    }
+    .success {
+      color: #15803d;
+      font-size: 0.8rem;
+      margin-top: 4px;
+    }
+    .dash-title {
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 4px;
+    }
+    .dash-message {
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+    .dash-meta {
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div id="view-server" class="section">
+    <h2>Serveur Flask</h2>
+    <label for="server-url">URL du serveur</label>
+    <input id="server-url" type="text" placeholder="http://127.0.0.1:5000">
+    <div class="row">
+      <button id="btn-test">Tester connexion</button>
+    </div>
+    <div id="server-message" class="small"></div>
+  </div>
+
+  <div id="view-login" class="section hidden">
+    <h2>Connexion</h2>
+    <label for="login-username">Nom d'utilisateur</label>
+    <input id="login-username" type="text">
+    <label for="login-password">Mot de passe</label>
+    <input id="login-password" type="password">
+    <div class="row">
+      <button class="secondary" id="btn-back-server">Changer serveur</button>
+      <button id="btn-login">Se connecter</button>
+    </div>
+    <div id="login-message" class="small"></div>
+  </div>
+
+  <div id="view-dashboard" class="section hidden">
+    <h2>Dashboard</h2>
+    <div id="dashboard-title" class="dash-title"></div>
+    <div id="dashboard-message" class="dash-message"></div>
+    <div id="dashboard-info" class="dash-meta"></div>
+    <div class="row" style="margin-top: 8px;">
+      <button class="secondary" id="btn-logout">Se déconnecter</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+
+
