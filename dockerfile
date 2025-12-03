@@ -12,6 +12,8 @@ ENV PYTHONUNBUFFERED=1
 
 ENV DATA=/mnt/user/appdata/anime-downloader
 ENV PLEX=/mnt/user/appdata/plex
+ENV LOCAL_ADMIN_PASSWORD=change-moi-en-production
+ENV SECRET_KEY=change-me-en-production
 
 WORKDIR /app
 

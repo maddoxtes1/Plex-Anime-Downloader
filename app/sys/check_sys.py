@@ -11,6 +11,8 @@ class check_sys:
     def __init__(self):
         self.data_path = os.getenv("DATA", "/mnt/user/appdata/anime-downloader")
         self.plex_path = os.getenv("PLEX", "/mnt/user/appdata/plex")
+        self.local_admin_password = os.getenv("LOCAL_ADMIN_PASSWORD", "change-moi")
+        self.app_secret_key = os.getenv("FLASK_SECRET_KEY", "change-me-en-production")
 
         self.logs_path = os.path.join(self.data_path, "logs")
         create_path(path=self.logs_path)
@@ -52,14 +54,10 @@ class check_sys:
         if not os.path.exists(config_file):
             config = configparser.ConfigParser(allow_no_value=True)
             config.add_section('settings')
-            config.set('settings', '# Nombre de download simultaner')
             config.set('settings', 'threads', '4')
-            config.set('settings', '# Intervalle de temps pour chaque scan en secondes')
             config.set('settings', 'timer', '3600')
             config.add_section('scan-option')
-            config.set('scan-option', '# Options de scan : active ou désactive les scan sur les sites')
             config.set('scan-option', 'anime-sama', 'True')
-            config.set('scan-option', '#franime est pas encore dev donc il ne marche pas mais jai prevue de le rajouter')
             config.set('scan-option', 'franime', 'False')
             with open(config_file, 'w') as configfile:
                 config.write(configfile)
@@ -103,8 +101,8 @@ class check_sys:
         plex_path_file = f"{self.config_path}/plex_path.json"
         if not os.path.exists(plex_path_file):
             data_json = [
-                {"_comment": "se fichier de configuration detecte automatiquement les dossier qui son present dans ton path plex"}
-                {"_comment": "si tu vois pas de configuration assure toi de avoir mis le bon path et que dans se pas il aille des dossier"}
+                {"_comment": "se fichier de configuration detecte automatiquement les dossier qui son present dans ton path plex"},
+                {"_comment": "si tu vois pas de configuration assure toi de avoir mis le bon path et que dans se pas il aille des dossier"},
                 {"_comment": "vous pouvez modifier le langage des dossier parcontre vous ne pouvez pas avoir un dossier qui a le même langage qu'un autre dossier"},
                 {"_comment": "voci tout les langage possible pour le moment: vostfr, va, vf, vkr, vcn, vqc, vf1, vf2, vj,"},
                 {"_comment": "vous etes pas obliger de metre tout les langage possible vous pouvez en metre que un ou deux"},

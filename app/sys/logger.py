@@ -50,6 +50,10 @@ def sys_logger(path=None):
         raise ValueError("Le chemin du fichier de log n'est pas défini")
     return setup_logger("System", "sys.log", _path)
 
+def flask_logger():
+    global _path
+    return setup_logger("Flask", "flask.log", _path)
+    
 def queue_logger():
     global _path
     return setup_logger("Queue", "queue.log", _path)
