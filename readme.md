@@ -13,7 +13,7 @@ J'ai un serveur Plex et j'aime les animes. J'avais la flemme de downloader manue
 
 - docker
 
-⚠️ si tu a une bibliotech jellyfin tu vas surment avoir des probleme avec la detection des anime 
+⚠️ si tu a une bibliotheque jellyfin tu vas surment avoir des probleme avec la detection des anime 
 
 jai fait un petit docker qui peut run h24 qui permet de cree automatiquement le nfo se qui rend la detection des anime/episode plus simple ses pas parfait mais sa aide beaucoup [lien-nfo-watcher](https://hub.docker.com/repository/docker/maddoxtes/jellyfin-nfo-watcher/general)
 
@@ -37,6 +37,8 @@ jai fait un petit docker qui peut run h24 qui permet de cree automatiquement le 
 
 [comment download des anime](https://youtu.be/5oiUDOtd_ww)
 
+Si vous rencontrez des problèmes avec mon application Docker ou si vous trouvez des bugs, rendez-vous sur le serveur Discord et je vous répondrai plus rapidement.
+
 
 
 # Lien
@@ -45,3 +47,4 @@ jai fait un petit docker qui peut run h24 qui permet de cree automatiquement le 
 - [Gitea](https://git.maddoxserv.com/maddox/Plex-Anime-Downloader)
 - [Docker Hub](https://hub.docker.com/r/maddoxtes/plex-anime-downloader)
 - [Patch-note](https://git.maddoxserv.com/maddox/Plex-Anime-Downloader/releases)
+- [Discord](https://discord.gg/UG9A6MP8rE)
