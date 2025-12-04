@@ -9,10 +9,13 @@ from flask import (
     url_for,
     session,
     flash,
+    send_file,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import shutil
+import zipfile
+import tempfile
 
 
 def create_local_blueprint(helpers, app_config, plex_root, config_path):
@@ -299,6 +302,65 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path):
         session.pop("local_authenticated", None)
         flash("Vous avez été déconnecté de l'interface locale.", "success")
         return redirect(url_for("local.local_login"))
+
+    @local_bp.route("/local/extension/download")
+    def local_download_extension():
+        """
+        Télécharge l'extension Chrome au format ZIP.
+        """
+        if not session.get("local_authenticated"):
+            flash("Non autorisé.", "error")
+            return redirect(url_for("local.local_login"))
+
+        # Chemin vers le dossier extension
+        # Depuis app/flask/routes/local_routes.py, remonter de 4 niveaux pour arriver à la racine
+        current_file = os.path.abspath(__file__)
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file))))
+        extension_dir = os.path.join(base_dir, "extension")
+        
+        if not os.path.exists(extension_dir):
+            flash("Le dossier extension est introuvable.", "error")
+            return redirect(url_for("local.local_dashboard"))
+
+        # Créer un fichier ZIP temporaire
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+        temp_file.close()
+
+        try:
+            with zipfile.ZipFile(temp_file.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Liste des fichiers à inclure dans l'extension
+                extension_files = [
+                    "manifest.json",
+                    "popup.html",
+                    "popup.js",
+                    "content.js",
+                    "content.css",
+                    "icon.png",
+                ]
+                
+                for filename in extension_files:
+                    file_path = os.path.join(extension_dir, filename)
+                    if os.path.exists(file_path):
+                        zipf.write(file_path, filename)
+                    else:
+                        flash(f"Fichier manquant: {filename}", "error")
+
+            return send_file(
+                temp_file.name,
+                mimetype='application/zip',
+                as_attachment=True,
+                download_name='anime-downloader-extension.zip'
+            )
+        except Exception as e:
+            flash(f"Erreur lors de la création du ZIP: {e}", "error")
+            return redirect(url_for("local.local_dashboard"))
+        finally:
+            # Nettoyer le fichier temporaire après l'envoi
+            if os.path.exists(temp_file.name):
+                try:
+                    os.unlink(temp_file.name)
+                except:
+                    pass
 
     return local_bp
 

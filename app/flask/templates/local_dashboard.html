@@ -275,6 +275,21 @@
         </div>
 
         <div class="card mt-4">
+            <h2 class="section-title">Extension Chrome</h2>
+            <p class="sub">
+                Téléchargez l'extension Chrome pour ajouter des animes à la liste de téléchargement depuis anime-sama.org.
+            </p>
+            <div class="mt-2">
+                <a href="{{ url_for('local.local_download_extension') }}" class="btn primary" style="text-decoration: none; display: inline-block;">
+                    Télécharger l'extension (.zip)
+                </a>
+            </div>
+            <p class="sub mt-2" style="font-size: 0.75rem; color: #6b7280;">
+                Instructions : Décompressez le fichier ZIP, allez dans Chrome → Extensions → Mode développeur → Charger l'extension non empaquetée, puis sélectionnez le dossier décompressé.
+            </p>
+        </div>
+
+        <div class="card mt-4">
             <h2 class="section-title">Chemins Plex (plex_path.json)</h2>
             <p class="sub">
                 Racine Plex : <code>{{ plex_root }}</code><br>

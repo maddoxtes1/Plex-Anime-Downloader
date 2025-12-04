@@ -3,9 +3,19 @@
   "name": "Flask Auth Client",
   "version": "1.0.0",
   "description": "Extension Chrome/Opera pour se connecter à un serveur Flask et afficher un dashboard.",
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Flask Auth Client"
+    "default_title": "Flask Auth Client",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
   },
   "permissions": [
     "storage"
