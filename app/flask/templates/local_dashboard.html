@@ -183,7 +183,7 @@
         <h1>Dashboard local - Admin</h1>
         <div class="right">
             <span class="badge">Accès local uniquement</span>
-            <a href="{{ url_for('local_logout') }}">Déconnexion</a>
+            <a href="{{ url_for('local.local_logout') }}">Déconnexion</a>
         </div>
     </header>
 
@@ -217,7 +217,7 @@
                             <tr>
                                 <td>{{ u["username"] }}</td>
                                 <td>
-                                    <form class="inline" method="post" action="{{ url_for('local_delete_user') }}">
+                                    <form class="inline" method="post" action="{{ url_for('local.local_delete_user') }}">
                                         <input type="hidden" name="username" value="{{ u['username'] }}">
                                         <button class="btn danger" type="submit">Supprimer</button>
                                     </form>
@@ -233,7 +233,7 @@
                 </div>
             {% endif %}
 
-            <form method="post" action="{{ url_for('local_create_user') }}" class="mt-2">
+            <form method="post" action="{{ url_for('local.local_create_user') }}" class="mt-2">
                 <label class="small">Ajouter un utilisateur :</label><br>
                 <input class="medium" type="text" name="username" placeholder="username" required>
                 <input class="medium" type="password" name="password" placeholder="mot de passe" required>
@@ -249,7 +249,7 @@
                 Contrôle des threads, timer et options de scan.
             </p>
 
-            <form method="post" action="{{ url_for('local_update_config') }}">
+            <form method="post" action="{{ url_for('local.local_update_config') }}">
                 <div class="mb-2">
                     <label class="small" for="threads">Threads</label>
                     <input class="short" type="number" id="threads" name="threads" min="1" value="{{ config.threads }}">
@@ -296,7 +296,7 @@
                         {% for e in plex_entries %}
                             <tr>
                                 <td>
-                                    <form class="inline" method="post" action="{{ url_for('local_plex_update') }}">
+                                    <form class="inline" method="post" action="{{ url_for('local.local_plex_update') }}">
                                         <input type="hidden" name="old_path" value="{{ e.path }}">
                                         <input class="medium" type="text" name="path" value="{{ e.path }}">
                                 </td>
@@ -306,7 +306,7 @@
                                 <td>
                                         <button class="btn" type="submit">Mettre à jour</button>
                                     </form>
-                                    <form class="inline" method="post" action="{{ url_for('local_plex_delete') }}">
+                                    <form class="inline" method="post" action="{{ url_for('local.local_plex_delete') }}">
                                         <input type="hidden" name="path" value="{{ e.path }}">
                                         <button class="btn danger" type="submit">Supprimer</button>
                                     </form>
@@ -321,16 +321,10 @@
                 </div>
             {% endif %}
 
-            <form method="post" action="{{ url_for('local_plex_add') }}" class="mt-2">
+            <form method="post" action="{{ url_for('local.local_plex_add') }}" class="mt-2">
                 <label class="small">Ajouter / mettre à jour un chemin :</label><br>
                 <input class="medium" type="text" name="path" placeholder="ex: anime_vf" required>
                 <input class="medium" type="text" name="languages" placeholder="ex: vf, vj">
-                <div class="mt-2 mb-2">
-                    <label class="small">
-                        <input type="checkbox" name="create_folder">
-                        Créer le dossier dans <code>{{ plex_root }}</code> s'il n'existe pas
-                    </label>
-                </div>
                 <button class="btn primary" type="submit">Enregistrer</button>
             </form>
         </div>
