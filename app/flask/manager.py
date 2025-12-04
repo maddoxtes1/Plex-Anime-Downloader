@@ -1,6 +1,70 @@
 from threading import Thread
-from . import create_app
+from flask import Flask
+from werkzeug.security import generate_password_hash
+from flask_cors import CORS
 from app.sys.logger import flask_logger
+from app.flask.helpers import FlaskHelpers
+from app.flask.routes.local_routes import create_local_blueprint
+from app.flask.routes.api_routes import create_api_blueprint
+import os
+
+
+def create_app(system) -> Flask:
+    """
+    Crée et configure l'application Flask pour :
+    - l'interface locale admin (type Vaultwarden)
+    - l'API JSON consommée par l'extension navigateur
+
+    data_path doit correspondre à DATA dans ton conteneur (même valeur que check_sys.data_path).
+    """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    template_dir = os.path.join(base_dir, "templates")
+    
+    app = Flask(
+        __name__,
+        template_folder=template_dir,
+    )
+
+    log = flask_logger()
+
+    if system:
+        data_path = system.data_path
+        config_path = system.config_path
+        plex_root = system.plex_path
+        secret_key = system.app_secret_key
+        local_admin_password = system.local_admin_password
+    else:
+        raise ValueError("system is required to create the app debug: line 39 in flask/manager.py")
+
+    app.config["SECRET_KEY"] = secret_key
+
+    # Mot de passe admin local (ENV obligatoire en prod)
+    app.config["LOCAL_ADMIN_PASSWORD_HASH"] = generate_password_hash(local_admin_password)
+
+    # CORS pour l'extension (API uniquement)
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": "*"}},
+    )
+
+    # Initialisation des helpers
+    helpers = FlaskHelpers(data_path, config_path, plex_root)
+    helpers.init_db()
+
+    # Enregistrement des blueprints
+    local_bp = create_local_blueprint(
+        helpers=helpers,
+        app_config=app.config,
+        plex_root=plex_root,
+        config_path=config_path,
+    )
+    app.register_blueprint(local_bp)
+
+    api_bp = create_api_blueprint(helpers=helpers)
+    app.register_blueprint(api_bp)
+
+    log.info("Application Flask initialisée (admin local + API extension)")
+    return app
 
 
 class FlaskServer:
