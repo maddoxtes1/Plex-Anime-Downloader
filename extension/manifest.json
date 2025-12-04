@@ -13,6 +13,16 @@
   "host_permissions": [
     "http://*/*",
     "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://anime-sama.org/planning/*",
+        "https://anime-sama.org/catalogue/*/saison*/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"]
+    }
   ]
 }
 

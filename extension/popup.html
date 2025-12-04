@@ -9,7 +9,8 @@
       margin: 0;
       padding: 12px;
       width: 320px;
-      background: #f3f4f6;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 400px;
     }
     h1, h2 {
       font-size: 1.1rem;
@@ -17,10 +18,11 @@
     }
     .section {
       background: white;
-      border-radius: 10px;
-      padding: 12px;
-      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
-      margin-bottom: 10px;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      margin-bottom: 12px;
+      backdrop-filter: blur(10px);
     }
     label {
       font-size: 0.85rem;
@@ -39,17 +41,26 @@
       font-size: 0.9rem;
     }
     button {
-      padding: 7px 10px;
+      padding: 8px 14px;
       border-radius: 8px;
       border: none;
-      background: #2563eb;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       font-size: 0.9rem;
       font-weight: 600;
       cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    button:active:not(:disabled) {
+      transform: translateY(0);
     }
     button.secondary {
-      background: #6b7280;
+      background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
     }
     button:disabled {
       opacity: 0.6;
@@ -86,8 +97,53 @@
     .dash-meta {
       font-size: 0.75rem;
       color: #6b7280;
+      margin-top: 8px;
     }
     .hidden { display: none; }
+    
+    /* Statut du serveur */
+    .status-container {
+      margin-bottom: 12px;
+      padding: 10px;
+      background: #f9fafb;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #9ca3af;
+      animation: pulse 2s infinite;
+    }
+    .status-dot.connected {
+      background: #10b981;
+      animation: none;
+    }
+    .status-dot.disconnected {
+      background: #ef4444;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    #status-text {
+      color: #374151;
+    }
+    .status-indicator.connected #status-text {
+      color: #10b981;
+    }
+    .status-indicator.disconnected #status-text {
+      color: #ef4444;
+    }
   </style>
 </head>
 <body>
@@ -116,6 +172,15 @@
 
   <div id="view-dashboard" class="section hidden">
     <h2>Dashboard</h2>
+    
+    <!-- Statut du serveur -->
+    <div id="server-status" class="status-container">
+      <div class="status-indicator" id="status-indicator">
+        <span class="status-dot"></span>
+        <span id="status-text">Vérification...</span>
+      </div>
+    </div>
+
     <div id="dashboard-title" class="dash-title"></div>
     <div id="dashboard-message" class="dash-message"></div>
     <div id="dashboard-info" class="dash-meta"></div>

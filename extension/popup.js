@@ -17,9 +17,12 @@ const dashboardTitle = document.getElementById("dashboard-title");
 const dashboardMessage = document.getElementById("dashboard-message");
 const dashboardInfo = document.getElementById("dashboard-info");
 const btnLogout = document.getElementById("btn-logout");
+const statusIndicator = document.getElementById("status-indicator");
+const statusText = document.getElementById("status-text");
 
 let currentUser = null;
 let currentServer = null;
+let statusCheckInterval = null;
 
 function showView(name) {
   viewServer.classList.add("hidden");
@@ -39,7 +42,7 @@ function setMessage(el, text, type = "") {
 }
 
 async function loadState() {
-  const data = await chrome.storage.sync.get(["serverUrl", "lastUser"]);
+  const data = await chrome.storage.sync.get(["serverUrl", "lastUser", "isLoggedIn"]);
   if (data.serverUrl) {
     inputServerUrl.value = data.serverUrl;
     currentServer = data.serverUrl;
@@ -47,13 +50,89 @@ async function loadState() {
   if (data.lastUser) {
     currentUser = data.lastUser;
   }
+  // Si l'utilisateur était connecté, restaurer la session
+  if (data.isLoggedIn && currentUser && currentServer) {
+    await loadDashboard();
+  }
 }
 
 async function saveState() {
   await chrome.storage.sync.set({
     serverUrl: currentServer,
     lastUser: currentUser,
+    isLoggedIn: currentUser !== null,
   });
+}
+
+async function checkServerStatus() {
+  if (!currentServer) {
+    updateServerStatus(false, "Aucun serveur configuré");
+    return;
+  }
+
+  try {
+    const resp = await fetch(currentServer + "/api/ping", {
+      method: "GET",
+      cache: "no-cache",
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.ok) {
+        updateServerStatus(true, "Serveur connecté");
+        return;
+      }
+    }
+    updateServerStatus(false, "Serveur non disponible");
+  } catch (e) {
+    updateServerStatus(false, "Erreur de connexion");
+  }
+}
+
+function updateServerStatus(connected, text) {
+  if (!statusIndicator || !statusText) return;
+  statusText.textContent = text;
+  statusIndicator.className = "status-indicator " + (connected ? "connected" : "disconnected");
+  const statusDot = statusIndicator.querySelector(".status-dot");
+  if (statusDot) {
+    statusDot.className = "status-dot " + (connected ? "connected" : "disconnected");
+  }
+}
+
+async function loadDashboard() {
+  if (!currentServer || !currentUser) {
+    showView("login");
+    return;
+  }
+
+  // Vérifier le statut du serveur
+  await checkServerStatus();
+  
+  // Démarrer la vérification périodique du statut
+  if (statusCheckInterval) {
+    clearInterval(statusCheckInterval);
+  }
+  statusCheckInterval = setInterval(checkServerStatus, 5000); // Vérifier toutes les 5 secondes
+
+  try {
+    // Charger le dashboard
+    const dashResp = await fetch(
+      currentServer + "/api/dashboard?user=" + encodeURIComponent(currentUser)
+    );
+    const dashData = await dashResp.json();
+
+    const title = dashData?.data?.title || "Dashboard";
+    const message =
+      dashData?.data?.message || "Bienvenue, aucun détail supplémentaire.";
+
+    dashboardTitle.textContent = title;
+    dashboardMessage.textContent = message;
+    dashboardInfo.textContent = `Connecté en tant que ${currentUser} sur ${currentServer}`;
+
+    showView("dashboard");
+  } catch (e) {
+    console.error(e);
+    updateServerStatus(false, "Erreur de connexion");
+  }
 }
 
 btnTest.addEventListener("click", async () => {
@@ -134,22 +213,8 @@ btnLogin.addEventListener("click", async () => {
     await saveState();
     setMessage(loginMessage, "Connexion réussie.", "success");
 
-    // Charger le "dashboard" JSON
-    const dashResp = await fetch(
-      currentServer + "/api/dashboard?user=" + encodeURIComponent(currentUser)
-    );
-    const dashData = await dashResp.json();
-
-    // dashData attend une structure { ok, user, data: { title, message } }
-    const title = dashData?.data?.title || "Dashboard";
-    const message =
-      dashData?.data?.message || "Bienvenue, aucun détail supplémentaire.";
-
-    dashboardTitle.textContent = title;
-    dashboardMessage.textContent = message;
-    dashboardInfo.textContent = `Connecté en tant que ${currentUser} sur ${currentServer}`;
-
-    showView("dashboard");
+    // Charger le dashboard
+    await loadDashboard();
   } catch (e) {
     console.error(e);
     setMessage(loginMessage, "Erreur réseau pendant la connexion.", "error");
@@ -165,12 +230,23 @@ btnLogout.addEventListener("click", async () => {
   dashboardMessage.textContent = "";
   dashboardInfo.textContent = "";
   setMessage(loginMessage, "");
+  
+  // Arrêter la vérification du statut
+  if (statusCheckInterval) {
+    clearInterval(statusCheckInterval);
+    statusCheckInterval = null;
+  }
+  
   showView("login");
 });
 
 (async function init() {
   await loadState();
-  if (currentServer) {
+  if (currentUser && currentServer) {
+    // L'utilisateur est déjà connecté, afficher le dashboard
+    showView("dashboard");
+    await loadDashboard();
+  } else if (currentServer) {
     showView("login");
   } else {
     showView("server");
