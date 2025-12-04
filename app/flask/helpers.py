@@ -132,3 +132,169 @@ class FlaskHelpers:
             )
         conn.close()
 
+    def load_anime_json(self):
+        """Charge le fichier anime.json"""
+        anime_json_path = os.path.join(self.config_path, "anime.json")
+        with open(anime_json_path, "r", encoding="utf-8") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                # Si erreur, retourner la structure par défaut
+                return [
+                    {
+                        "auto_download": {
+                            "lundi": [],
+                            "mardi": [],
+                            "mercredi": [],
+                            "jeudi": [],
+                            "vendredi": [],
+                            "samedi": [],
+                            "dimanche": [],
+                            "no_day": []
+                        },
+                        "single_download": []
+                    }
+                ]
+
+    def save_anime_json(self, data):
+        """Sauvegarde le fichier anime.json"""
+        anime_json_path = os.path.join(self.config_path, "anime.json")
+        os.makedirs(self.config_path, exist_ok=True)
+        with open(anime_json_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+
+    def add_anime_to_json(self, name, season, langage, streaming, file_name, day=None):
+        """
+        Ajoute un anime dans anime.json
+        
+        Args:
+            name: Nom de l'anime (slug)
+            season: Numéro de saison
+            langage: Langage (vostfr, vf, etc.)
+            streaming: Source de streaming (anime-sama, etc.)
+            file_name: Nom de fichier (ou "none")
+            day: Jour de la semaine (lundi, mardi, etc.) ou None pour single_download
+        """
+        data = self.load_anime_json()
+        
+        if not data or len(data) == 0:
+            data = [
+                {
+                    "auto_download": {
+                        "lundi": [],
+                        "mardi": [],
+                        "mercredi": [],
+                        "jeudi": [],
+                        "vendredi": [],
+                        "samedi": [],
+                        "dimanche": [],
+                        "no_day": []
+                    },
+                    "single_download": []
+                }
+            ]
+        
+        anime_entry = {
+            "name": name,
+            "season": str(season),
+            "langage": langage,
+            "streaming": streaming,
+            "file_name": file_name
+        }
+        
+        # Vérifier si l'anime existe déjà
+        if day and day in data[0]["auto_download"]:
+            # Vérifier dans auto_download
+            existing = data[0]["auto_download"][day]
+            for item in existing:
+                if item.get("name") == name and item.get("season") == str(season) and item.get("langage") == langage:
+                    return False  # Déjà présent
+            data[0]["auto_download"][day].append(anime_entry)
+        else:
+            # Ajouter dans single_download
+            existing = data[0]["single_download"]
+            for item in existing:
+                if item.get("name") == name and item.get("season") == str(season) and item.get("langage") == langage:
+                    return False  # Déjà présent
+            data[0]["single_download"].append(anime_entry)
+        
+        self.save_anime_json(data)
+        return True
+
+    def check_anime_in_json(self, name, season, langage):
+        """
+        Vérifie si un anime existe dans anime.json
+        
+        Args:
+            name: Nom de l'anime (slug)
+            season: Numéro de saison
+            langage: Langage (vostfr, vf, etc.)
+        
+        Returns:
+            dict avec "exists": bool, "day": str ou None, "location": str
+        """
+        data = self.load_anime_json()
+        
+        if not data or len(data) == 0:
+            return {"exists": False, "day": None, "location": None}
+        
+        # Chercher dans auto_download
+        for day in ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche", "no_day"]:
+            if day in data[0]["auto_download"]:
+                for item in data[0]["auto_download"][day]:
+                    if item.get("name") == name and item.get("season") == str(season) and item.get("langage") == langage:
+                        return {"exists": True, "day": day if day != "no_day" else None, "location": f"auto_download.{day}"}
+        
+        # Chercher dans single_download
+        if "single_download" in data[0]:
+            for item in data[0]["single_download"]:
+                if item.get("name") == name and item.get("season") == str(season) and item.get("langage") == langage:
+                    return {"exists": True, "day": None, "location": "single_download"}
+        
+        return {"exists": False, "day": None, "location": None}
+
+    def remove_anime_from_json(self, name, season, langage):
+        """
+        Supprime un anime de anime.json
+        
+        Args:
+            name: Nom de l'anime (slug)
+            season: Numéro de saison
+            langage: Langage (vostfr, vf, etc.)
+        
+        Returns:
+            bool: True si supprimé, False si non trouvé
+        """
+        data = self.load_anime_json()
+        
+        if not data or len(data) == 0:
+            return False
+        
+        found = False
+        
+        # Chercher et supprimer dans auto_download
+        for day in ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche", "no_day"]:
+            if day in data[0]["auto_download"]:
+                original_length = len(data[0]["auto_download"][day])
+                data[0]["auto_download"][day] = [
+                    item for item in data[0]["auto_download"][day]
+                    if not (item.get("name") == name and item.get("season") == str(season) and item.get("langage") == langage)
+                ]
+                if len(data[0]["auto_download"][day]) < original_length:
+                    found = True
+        
+        # Chercher et supprimer dans single_download
+        if "single_download" in data[0]:
+            original_length = len(data[0]["single_download"])
+            data[0]["single_download"] = [
+                item for item in data[0]["single_download"]
+                if not (item.get("name") == name and item.get("season") == str(season) and item.get("langage") == langage)
+            ]
+            if len(data[0]["single_download"]) < original_length:
+                found = True
+        
+        if found:
+            self.save_anime_json(data)
+        
+        return found
+

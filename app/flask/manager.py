@@ -60,7 +60,7 @@ def create_app(system) -> Flask:
     )
     app.register_blueprint(local_bp)
 
-    api_bp = create_api_blueprint(helpers=helpers)
+    api_bp = create_api_blueprint(helpers=helpers, system=system)
     app.register_blueprint(api_bp)
 
     log.info("Application Flask initialisée (admin local + API extension)")
@@ -80,7 +80,8 @@ class FlaskServer:
             host: Adresse IP du serveur (par défaut: 0.0.0.0)
             port: Port du serveur (par défaut: 5000)
             debug: Mode debug (par défaut: False)
-            data_path: Chemin vers le dossier de données (DATA) de l'application
+            system: Instance de check_sys
+            queue_manager: Instance de queues pour les téléchargements
         """
         self.logger = flask_logger()
         self.host = host
@@ -89,7 +90,6 @@ class FlaskServer:
         self.system = system
         self.app = None
         self.thread = None
-        self.system = system
         self._running = False
 
     def start(self):
