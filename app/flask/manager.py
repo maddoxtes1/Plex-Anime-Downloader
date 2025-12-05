@@ -1,6 +1,5 @@
 from threading import Thread
 from flask import Flask
-from werkzeug.security import generate_password_hash
 from flask_cors import CORS
 from app.sys.logger import flask_logger
 from app.flask.helpers import FlaskHelpers
@@ -9,13 +8,46 @@ from app.flask.routes.api_routes import create_api_blueprint
 import os
 
 
-def create_app(system) -> Flask:
+def create_api_app(system) -> Flask:
     """
-    Crée et configure l'application Flask pour :
-    - l'interface locale admin (type Vaultwarden)
-    - l'API JSON consommée par l'extension navigateur
+    Crée l'application Flask pour l'API JSON (extension navigateur).
+    Accessible publiquement via reverse proxy.
+    """
+    log = flask_logger()
 
-    data_path doit correspondre à DATA dans ton conteneur (même valeur que check_sys.data_path).
+    if system:
+        data_path = system.data_path
+        config_path = system.config_path
+        plex_root = system.plex_path
+        secret_key = system.app_secret_key
+    else:
+        raise ValueError("system is required to create the app")
+
+    app = Flask(__name__)
+    app.config["SECRET_KEY"] = secret_key
+
+    # CORS pour l'extension (API uniquement)
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": "*"}},
+    )
+
+    # Initialisation des helpers
+    helpers = FlaskHelpers(data_path, config_path, plex_root)
+    helpers.init_db()
+
+    # Enregistrement du blueprint API uniquement
+    api_bp = create_api_blueprint(helpers=helpers, system=system)
+    app.register_blueprint(api_bp)
+
+    log.info("Application Flask API initialisée (port public)")
+    return app
+
+
+def create_local_app(system) -> Flask:
+    """
+    Crée l'application Flask pour l'interface locale admin.
+    Accessible uniquement en localhost (127.0.0.1).
     """
     base_dir = os.path.dirname(os.path.abspath(__file__))
     template_dir = os.path.join(base_dir, "templates")
@@ -32,38 +64,30 @@ def create_app(system) -> Flask:
         config_path = system.config_path
         plex_root = system.plex_path
         secret_key = system.app_secret_key
-        local_admin_password = system.local_admin_password
+        local_admin_password_hash = system.local_admin_password_hash
     else:
-        raise ValueError("system is required to create the app debug: line 39 in flask/manager.py")
+        raise ValueError("system is required to create the app")
 
     app.config["SECRET_KEY"] = secret_key
-
-    # Mot de passe admin local (ENV obligatoire en prod)
-    app.config["LOCAL_ADMIN_PASSWORD_HASH"] = generate_password_hash(local_admin_password)
-
-    # CORS pour l'extension (API uniquement)
-    CORS(
-        app,
-        resources={r"/api/*": {"origins": "*"}},
-    )
+    
+    # Configuration de la session : expiration après 5 minutes d'inactivité
+    app.config["PERMANENT_SESSION_LIFETIME"] = 300  # 5 minutes en secondes
 
     # Initialisation des helpers
     helpers = FlaskHelpers(data_path, config_path, plex_root)
     helpers.init_db()
 
-    # Enregistrement des blueprints
+    # Enregistrement du blueprint local uniquement
     local_bp = create_local_blueprint(
         helpers=helpers,
         app_config=app.config,
         plex_root=plex_root,
         config_path=config_path,
+        local_admin_password_hash=local_admin_password_hash,
     )
     app.register_blueprint(local_bp)
 
-    api_bp = create_api_blueprint(helpers=helpers, system=system)
-    app.register_blueprint(api_bp)
-
-    log.info("Application Flask initialisée (admin local + API extension)")
+    log.info("Application Flask locale initialisée (localhost uniquement)")
     return app
 
 
@@ -72,7 +96,7 @@ class FlaskServer:
     Gestionnaire du serveur Flask
     """
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 5000, debug: bool = False, system: None = None):
+    def __init__(self, host: str = "0.0.0.0", port: int = 5000, debug: bool = False, system: None = None, app_type: str = "api"):
         """
         Initialise le serveur Flask
 
@@ -81,13 +105,14 @@ class FlaskServer:
             port: Port du serveur (par défaut: 5000)
             debug: Mode debug (par défaut: False)
             system: Instance de check_sys
-            queue_manager: Instance de queues pour les téléchargements
+            app_type: Type d'application ("api" ou "local", par défaut: "api")
         """
         self.logger = flask_logger()
         self.host = host
         self.port = port
         self.debug = debug
         self.system = system
+        self.app_type = app_type
         self.app = None
         self.thread = None
         self._running = False
@@ -101,15 +126,20 @@ class FlaskServer:
             return
 
         try:
-            # Créer l'application Flask avec le chemin DATA fourni
-            self.app = create_app(system=self.system)
+            # Créer l'application Flask selon le type
+            if self.app_type == "api":
+                self.app = create_api_app(system=self.system)
+            elif self.app_type == "local":
+                self.app = create_local_app(system=self.system)
+            else:
+                raise ValueError(f"Type d'application invalide: {self.app_type}. Utilisez 'api' ou 'local'.")
 
             # Démarrer le serveur dans un thread
             self.thread = Thread(target=self._run_server, daemon=True)
             self.thread.start()
             self._running = True
 
-            self.logger.info(f"Serveur Flask démarré sur http://{self.host}:{self.port}")
+            self.logger.info(f"Serveur Flask {self.app_type} démarré sur http://{self.host}:{self.port}")
         except Exception as e:
             self.logger.error(f"Erreur lors du démarrage du serveur Flask: {e}")
             raise
