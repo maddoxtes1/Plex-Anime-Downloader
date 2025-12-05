@@ -12,13 +12,14 @@ from flask import (
     send_file,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timedelta
 import os
 import shutil
 import zipfile
 import tempfile
 
 
-def create_local_blueprint(helpers, app_config, plex_root, config_path):
+def create_local_blueprint(helpers, app_config, plex_root, config_path, local_admin_password_hash):
     """
     Crée le blueprint pour les routes locales.
     
@@ -27,8 +28,37 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path):
         app_config: Configuration de l'app Flask (pour SECRET_KEY, etc.)
         plex_root: Chemin racine Plex
         config_path: Chemin vers le dossier de configuration
+        local_admin_password_hash: Hash du mot de passe admin local
     """
     local_bp = Blueprint("local", __name__)
+    
+    # Durée d'expiration de session : 5 minutes
+    SESSION_TIMEOUT = timedelta(minutes=5)
+    
+    @local_bp.before_request
+    def check_session_expiry():
+        """
+        Vérifie si la session a expiré (5 minutes d'inactivité).
+        """
+        if session.get("local_authenticated"):
+            last_activity = session.get("last_activity")
+            if last_activity:
+                try:
+                    last_activity_dt = datetime.fromisoformat(last_activity)
+                    if datetime.now() - last_activity_dt > SESSION_TIMEOUT:
+                        # Session expirée
+                        session.pop("local_authenticated", None)
+                        session.pop("last_activity", None)
+                        flash("Votre session a expiré. Veuillez vous reconnecter.", "error")
+                        return redirect(url_for("local.local_login"))
+                except (ValueError, TypeError):
+                    # Format invalide, réinitialiser
+                    session.pop("local_authenticated", None)
+                    session.pop("last_activity", None)
+            
+            # Mettre à jour la dernière activité
+            session["last_activity"] = datetime.now().isoformat()
+            session.permanent = True
 
     @local_bp.route("/", methods=["GET", "POST"])
     def local_login():
@@ -42,12 +72,19 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path):
             password = (request.form.get("password") or "").strip()
             if not password:
                 flash("Veuillez entrer le mot de passe.", "error")
-            elif not check_password_hash(app_config["LOCAL_ADMIN_PASSWORD_HASH"], password):
-                flash("Mot de passe invalide.", "error")
             else:
-                session["local_authenticated"] = True
-                flash("Connexion réussie.", "success")
-                return redirect(url_for("local.local_dashboard"))
+                try:
+                    is_valid = check_password_hash(local_admin_password_hash, password)
+                    if not is_valid:
+                        flash("Mot de passe invalide.", "error")
+                    else:
+                        session["local_authenticated"] = True
+                        session["last_activity"] = datetime.now().isoformat()
+                        session.permanent = True
+                        flash("Connexion réussie.", "success")
+                        return redirect(url_for("local.local_dashboard"))
+                except Exception as e:
+                    flash(f"Erreur lors de la vérification du mot de passe: {str(e)}", "error")
 
         return render_template("access.html")
 
@@ -300,6 +337,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path):
         Déconnexion de l'interface locale.
         """
         session.pop("local_authenticated", None)
+        session.pop("last_activity", None)
         flash("Vous avez été déconnecté de l'interface locale.", "success")
         return redirect(url_for("local.local_login"))
 
