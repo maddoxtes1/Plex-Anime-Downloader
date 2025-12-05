@@ -11,13 +11,18 @@ class check_sys:
     def __init__(self):
         self.data_path = os.getenv("DATA", "/mnt/user/appdata/anime-downloader")
         self.plex_path = os.getenv("PLEX", "/mnt/user/appdata/plex")
-        self.local_admin_password = os.getenv("LOCAL_ADMIN_PASSWORD", "change-moi")
         self.app_secret_key = os.getenv("FLASK_SECRET_KEY", "change-me-en-production")
 
         self.logs_path = os.path.join(self.data_path, "logs")
         create_path(path=self.logs_path)
         self.logger = sys_logger(path=self.logs_path)
         self.logger.info("Logs path Loaded/created")
+        
+        # Hash du mot de passe admin local (hashé à chaque démarrage)
+        from werkzeug.security import generate_password_hash
+        self.local_admin_password = os.getenv("LOCAL_ADMIN_PASSWORD", "change-moi")
+        self.local_admin_password_hash = generate_password_hash(self.local_admin_password)
+        self.logger.info("Mot de passe admin local hashé au démarrage")
 
         self.config_path = os.path.join(self.data_path, "config")
         create_path(path=self.config_path)
