@@ -44,8 +44,6 @@ services:
 - **DATA** : Chemin vers les données de l'application (par défaut : `/mnt/user/appdata/anime-downloader`)
 - **PLEX** : Chemin vers votre bibliothèque Plex/Jellyfin (⚠️ Ce chemin doit être votre bibliothèque de films ou séries)
 - **LOCAL_ADMIN_PASSWORD** : Mot de passe pour accéder au dashboard local et modifier la configuration via l'interface web
-- **FLASK_SECRET_KEY** : Clé secrète pour les sessions Flask (générez une clé aléatoire)
-- **USE_WAITRESS** : `true` pour utiliser Waitress (production) ou `false` pour le serveur de développement
 
 ### 3. Ports
 
