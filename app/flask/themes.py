@@ -1308,9 +1308,147 @@ THEMES = {
 }
 
 
+def hex_to_rgb(hex_color):
+    """Convertit une couleur hex en RGB pour rgba()"""
+    hex_color = hex_color.lstrip('#')
+    return ','.join(str(int(hex_color[i:i+2], 16)) for i in (0, 2, 4))
+
+
+def get_tabs_css(colors):
+    """Retourne le CSS pour les onglets basé sur les couleurs du thème"""
+    accent_rgb = hex_to_rgb(colors['accent_primary'])
+    return f"""
+        .tabs-container {{
+            background: {colors['bg_secondary']};
+            border-bottom: 2px solid {colors['border']};
+            padding: 0;
+            margin: 0;
+            display: flex;
+            gap: 0;
+        }}
+        .tab-button {{
+            flex: 1;
+            padding: 12px 16px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: {colors['text_secondary']};
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }}
+        .tab-button:hover {{
+            background: rgba({accent_rgb}, 0.05);
+            color: {colors['text_primary']};
+        }}
+        .tab-button.active {{
+            color: {colors['accent_primary']};
+            border-bottom-color: {colors['accent_primary']};
+            background: rgba({accent_rgb}, 0.1);
+        }}
+        .tab-content {{
+            display: none;
+            padding: 20px;
+        }}
+        .tab-content.active {{
+            display: block;
+        }}
+        .log-viewer {{
+            background: {colors['bg_card']};
+            border: 1px solid {colors['border']};
+            border-radius: 8px;
+            padding: 12px;
+            max-height: 600px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            color: {colors['text_primary']};
+        }}
+        .log-line {{
+            margin: 2px 0;
+            word-wrap: break-word;
+        }}
+        .log-selector {{
+            margin-bottom: 12px;
+        }}
+        .log-selector select {{
+            width: 100%;
+            max-width: 300px;
+        }}
+        .log-controls {{
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            align-items: center;
+        }}
+        .log-controls button {{
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }}
+        .log-auto-scroll {{
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }}
+        .log-auto-scroll input[type="checkbox"] {{
+            width: auto;
+        }}
+        .log-content-pre {{
+            margin: 0;
+            padding: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            line-height: 1.6;
+            color: {colors['text_primary']};
+        }}
+        .tabs-container-header {{
+            display: flex;
+            gap: 4px;
+            margin-right: 12px;
+            align-items: center;
+            flex: 1;
+            justify-content: flex-start;
+        }}
+        .tab-button-header {{
+            flex: 1;
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid {colors['border']};
+            border-radius: 6px;
+            color: {colors['text_secondary']};
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            text-align: center;
+            min-width: 0;
+        }}
+        .tab-button-header:hover {{
+            background: rgba({accent_rgb}, 0.1);
+            color: {colors['text_primary']};
+            border-color: {colors['accent_primary']};
+        }}
+        .tab-button-header.active {{
+            color: {colors['accent_primary']};
+            border-color: {colors['accent_primary']};
+            background: rgba({accent_rgb}, 0.15);
+            box-shadow: 0 0 8px rgba({accent_rgb}, 0.3);
+        }}
+    """
+
+
 def get_theme_css(theme_name):
-    """Retourne le CSS pour un thème donné"""
-    return THEMES.get(theme_name, THEMES["neon-cyberpunk"])["css"]
+    """Retourne le CSS pour un thème donné avec les styles d'onglets"""
+    theme = THEMES.get(theme_name, THEMES["neon-cyberpunk"])
+    base_css = theme["css"]
+    tabs_css = get_tabs_css(theme["colors"])
+    return base_css + tabs_css
 
 
 def get_theme_colors(theme_name):

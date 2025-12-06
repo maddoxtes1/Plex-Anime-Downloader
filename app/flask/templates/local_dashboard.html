@@ -12,14 +12,20 @@
     <header>
         <h1>Dashboard local - Admin</h1>
         <div class="right">
+            <!-- Barre d'onglets -->
+            <div class="tabs-container-header">
+                <button class="tab-button-header" onclick="switchTab('news')">📰 Actualités</button>
+                <button class="tab-button-header" onclick="switchTab('logs')">📋 Logs</button>
+                <button class="tab-button-header active" onclick="switchTab('settings')">⚙️ Paramètres</button>
+            </div>
             <span class="badge">Accès local uniquement</span>
             <a href="{{ url_for('local.local_logout') }}">Déconnexion</a>
         </div>
     </header>
 
     <div class="wrapper">
-        <div class="card">
-            <div class="messages">
+        <div class="card" style="padding: 0;">
+            <div class="messages" style="padding: 20px 20px 0;">
                 {% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
                         {% for category, message in messages %}
@@ -29,172 +35,457 @@
                 {% endwith %}
             </div>
 
-            <h2 class="section-title">Utilisateurs enregistrés</h2>
-            <p class="sub">
-                Comptes utilisés par l'extension (base SQLite locale).
-            </p>
+            <!-- Onglet Paramètres -->
+            <div id="tab-settings" class="tab-content active">
+                <div class="card mt-4">
+                    <h2 class="section-title">Utilisateurs enregistrés</h2>
+                    <p class="sub">
+                        Comptes utilisés par l'extension (base SQLite locale).
+                    </p>
 
-            {% if users %}
-                <table class="mb-3">
-                    <thead>
-                        <tr>
-                            <th>Nom d'utilisateur</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for u in users %}
-                            <tr>
-                                <td>{{ u["username"] }}</td>
-                                <td>
-                                    <form class="inline" method="post" action="{{ url_for('local.local_delete_user') }}">
-                                        <input type="hidden" name="username" value="{{ u['username'] }}">
-                                        <button class="btn danger" type="submit">Supprimer</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% else %}
-                <div class="empty mb-3">
-                    Aucun utilisateur pour le moment. Crée des comptes via l'extension
-                    ou ici depuis l'interface admin.
+                    {% if users %}
+                        <table class="mb-3">
+                            <thead>
+                                <tr>
+                                    <th>Nom d'utilisateur</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in users %}
+                                    <tr>
+                                        <td>{{ u["username"] }}</td>
+                                        <td>
+                                            <form class="inline" method="post" action="{{ url_for('local.local_delete_user') }}">
+                                                <input type="hidden" name="username" value="{{ u['username'] }}">
+                                                <button class="btn danger" type="submit">Supprimer</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <div class="empty mb-3">
+                            Aucun utilisateur pour le moment. Crée des comptes via l'extension
+                            ou ici depuis l'interface admin.
+                        </div>
+                    {% endif %}
+
+                    <form method="post" action="{{ url_for('local.local_create_user') }}" class="mt-2">
+                        <label class="small">Ajouter un utilisateur :</label><br>
+                        <input class="medium" type="text" name="username" placeholder="username" required>
+                        <input class="medium" type="password" name="password" placeholder="mot de passe" required>
+                        <button class="btn primary" type="submit">Créer</button>
+                    </form>
                 </div>
-            {% endif %}
 
-            <form method="post" action="{{ url_for('local.local_create_user') }}" class="mt-2">
-                <label class="small">Ajouter un utilisateur :</label><br>
-                <input class="medium" type="text" name="username" placeholder="username" required>
-                <input class="medium" type="password" name="password" placeholder="mot de passe" required>
-                <button class="btn primary" type="submit">Créer</button>
-            </form>
-
-        </div>
-
-        <div class="card mt-4">
-            <h2 class="section-title">Thème de l'interface</h2>
-            <p class="sub">
-                Choisissez le thème visuel pour le dashboard et l'extension.
-            </p>
-            <form method="post" action="{{ url_for('local.local_update_theme') }}">
-                <div class="mb-2">
-                    <label class="small" for="theme">Thème actuel :</label>
-                    <select name="theme" id="theme" style="width: 200px;">
-                        {% for theme_key, theme_name in available_themes.items() %}
-                            <option value="{{ theme_key }}" {% if theme_key == current_theme %}selected{% endif %}>
-                                {{ theme_name }}
-                            </option>
-                        {% endfor %}
-                    </select>
+                <div class="card mt-4">
+                    <h2 class="section-title">Thème de l'interface</h2>
+                    <p class="sub">
+                        Choisissez le thème visuel pour le dashboard et l'extension.
+                    </p>
+                    <form method="post" action="{{ url_for('local.local_update_theme') }}">
+                        <div class="mb-2">
+                            <label class="small" for="theme">Thème actuel :</label>
+                            <select name="theme" id="theme" style="width: 200px;">
+                                {% for theme_key, theme_name in available_themes.items() %}
+                                    <option value="{{ theme_key }}" {% if theme_key == current_theme %}selected{% endif %}>
+                                        {{ theme_name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button class="btn primary" type="submit">Changer le thème</button>
+                    </form>
                 </div>
-                <button class="btn primary" type="submit">Changer le thème</button>
-            </form>
-        </div>
 
-        <div class="card mt-4">
-            <h2 class="section-title">Configuration Docker (config.conf)</h2>
-            <p class="sub">
-                Fichier : <code>{{ CONFIG_PATH if CONFIG_PATH is defined else 'config.conf' }}</code>.
-                Contrôle des threads, timer et options de scan.
-            </p>
+                <div class="card mt-4">
+                    <h2 class="section-title">Configuration Docker (config.conf)</h2>
+                    <p class="sub">
+                        Fichier : <code>{{ CONFIG_PATH if CONFIG_PATH is defined else 'config.conf' }}</code>.
+                        Contrôle des threads, timer et options de scan.
+                    </p>
 
-            <form method="post" action="{{ url_for('local.local_update_config') }}">
-                <div class="mb-2">
-                    <label class="small" for="threads">Threads</label>
-                    <input class="short" type="number" id="threads" name="threads" min="1" value="{{ config.threads }}">
+                    <form method="post" action="{{ url_for('local.local_update_config') }}">
+                        <div class="mb-2">
+                            <label class="small" for="threads">Threads</label>
+                            <input class="short" type="number" id="threads" name="threads" min="1" value="{{ config.threads }}">
+                        </div>
+                        <div class="mb-2">
+                            <label class="small" for="timer">Timer (secondes)</label>
+                            <input class="short" type="number" id="timer" name="timer" min="1" value="{{ config.timer }}">
+                        </div>
+                        <div class="mb-2">
+                            <label class="small">
+                                <input type="checkbox" name="anime_sama" {% if config.anime_sama %}checked{% endif %}>
+                                Activer scan anime-sama
+                            </label>
+                        </div>
+                        <div class="mb-3">
+                            <label class="small">
+                                <input type="checkbox" name="franime" {% if config.franime %}checked{% endif %}>
+                                Activer scan franime (est dev mais ne marche pas parceque il on une protection antibot)
+                            </label>
+                        </div>
+                        <button class="btn primary" type="submit">Sauvegarder config.conf</button>
+                    </form>
                 </div>
-                <div class="mb-2">
-                    <label class="small" for="timer">Timer (secondes)</label>
-                    <input class="short" type="number" id="timer" name="timer" min="1" value="{{ config.timer }}">
-                </div>
-                <div class="mb-2">
-                    <label class="small">
-                        <input type="checkbox" name="anime_sama" {% if config.anime_sama %}checked{% endif %}>
-                        Activer scan anime-sama
-                    </label>
-                </div>
-                <div class="mb-3">
-                    <label class="small">
-                        <input type="checkbox" name="franime" {% if config.franime %}checked{% endif %}>
-                        Activer scan franime (est dev mais ne marche pas parceque il on une protection antibot)
-                    </label>
-                </div>
-                <button class="btn primary" type="submit">Sauvegarder config.conf</button>
-            </form>
-        </div>
 
-        <div class="card mt-4">
-            <h2 class="section-title">Extension Chrome</h2>
-            <p class="sub">
-                Téléchargez l'extension Chrome pour ajouter des animes à la liste de téléchargement depuis anime-sama.eu.
-            </p>
-            <div class="mt-2">
-                <a href="{{ url_for('local.local_download_extension') }}" class="btn primary" style="text-decoration: none; display: inline-block;">
-                    Télécharger l'extension (.zip)
-                </a>
+                <div class="card mt-4">
+                    <h2 class="section-title">Extension Chrome</h2>
+                    <p class="sub">
+                        Téléchargez l'extension Chrome pour ajouter des animes à la liste de téléchargement depuis anime-sama.eu.
+                    </p>
+                    <div class="mt-2">
+                        <a href="{{ url_for('local.local_download_extension') }}" class="btn primary" style="text-decoration: none; display: inline-block;">
+                            Télécharger l'extension (.zip)
+                        </a>
+                    </div>
+                    <p class="sub mt-2" style="font-size: 0.75rem; color: #6b7280;">
+                        Instructions : Décompressez le fichier ZIP, allez dans Chrome → Extensions → Mode développeur → Charger l'extension non empaquetée, puis sélectionnez le dossier décompressé.
+                    </p>
+                </div>
+
+                <div class="card mt-4">
+                    <h2 class="section-title">Chemins Plex (plex_path.json)</h2>
+                    <p class="sub">
+                        Racine Plex : <code>{{ plex_root }}</code><br>
+                        Chaque entrée correspond à un dossier (path) dans Plex, avec une ou plusieurs langues.<br>
+                        Vous pouvez modifier le langage des dossiers, mais un langage ne peut exister que dans un seul dossier.
+                        voici les langues disponible: vostfr, va, vf, vkr, vcn, vqc, vf1, vf2, vj.
+                    </p>
+
+                    {% if plex_entries %}
+                        <table class="mb-3">
+                            <thead>
+                                <tr>
+                                    <th>Path</th>
+                                    <th>Langues</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for e in plex_entries %}
+                                    <tr>
+                                        <td>
+                                            <form class="inline" method="post" action="{{ url_for('local.local_plex_update') }}">
+                                                <input type="hidden" name="old_path" value="{{ e.path }}">
+                                                <input class="medium" type="text" name="path" value="{{ e.path }}">
+                                        </td>
+                                        <td>
+                                                <input class="medium" type="text" name="languages" value="{{ e.language|join(', ') }}">
+                                        </td>
+                                        <td>
+                                                <button class="btn" type="submit">Mettre à jour</button>
+                                            </form>
+                                            <form class="inline" method="post" action="{{ url_for('local.local_plex_delete') }}">
+                                                <input type="hidden" name="path" value="{{ e.path }}">
+                                                <button class="btn danger" type="submit">Supprimer</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <div class="empty mb-3">
+                            Aucun chemin configuré pour l'instant.
+                        </div>
+                    {% endif %}
+
+                    <form method="post" action="{{ url_for('local.local_plex_add') }}" class="mt-2">
+                        <label class="small">Ajouter / mettre à jour un chemin :</label><br>
+                        <input class="medium" type="text" name="path" placeholder="ex: anime_vf" required>
+                        <input class="medium" type="text" name="languages" placeholder="ex: vf, vj">
+                        <button class="btn primary" type="submit">Enregistrer</button>
+                    </form>
+                </div>
             </div>
-            <p class="sub mt-2" style="font-size: 0.75rem; color: #6b7280;">
-                Instructions : Décompressez le fichier ZIP, allez dans Chrome → Extensions → Mode développeur → Charger l'extension non empaquetée, puis sélectionnez le dossier décompressé.
-            </p>
-        </div>
 
-        <div class="card mt-4">
-            <h2 class="section-title">Chemins Plex (plex_path.json)</h2>
-            <p class="sub">
-                Racine Plex : <code>{{ plex_root }}</code><br>
-                Chaque entrée correspond à un dossier (path) dans Plex, avec une ou plusieurs langues.<br>
-                Vous pouvez modifier le langage des dossiers, mais un langage ne peut exister que dans un seul dossier.
-                voici les langues disponible: vostfr, va, vf, vkr, vcn, vqc, vf1, vf2, vj.
-            </p>
+            <!-- Onglet Logs -->
+            <div id="tab-logs" class="tab-content">
+                <div class="card mt-4">
+                    <h2 class="section-title">Fichiers de logs</h2>
+                    <p class="sub">
+                        Consultez les logs de l'application et du conteneur Docker en temps réel.
+                    </p>
 
-            {% if plex_entries %}
-                <table class="mb-3">
-                    <thead>
-                        <tr>
-                            <th>Path</th>
-                            <th>Langues</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for e in plex_entries %}
-                            <tr>
-                                <td>
-                                    <form class="inline" method="post" action="{{ url_for('local.local_plex_update') }}">
-                                        <input type="hidden" name="old_path" value="{{ e.path }}">
-                                        <input class="medium" type="text" name="path" value="{{ e.path }}">
-                                </td>
-                                <td>
-                                        <input class="medium" type="text" name="languages" value="{{ e.language|join(', ') }}">
-                                </td>
-                                <td>
-                                        <button class="btn" type="submit">Mettre à jour</button>
-                                    </form>
-                                    <form class="inline" method="post" action="{{ url_for('local.local_plex_delete') }}">
-                                        <input type="hidden" name="path" value="{{ e.path }}">
-                                        <button class="btn danger" type="submit">Supprimer</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% else %}
-                <div class="empty mb-3">
-                    Aucun chemin configuré pour l'instant.
+                    <div class="log-selector">
+                        <label class="small" for="log-file-select">Sélectionner un fichier de log :</label>
+                        <select id="log-file-select" class="medium" style="width: 100%; max-width: 300px;" onchange="onLogFileChange()">
+                            <option value="">-- Choisir un fichier --</option>
+                            <option value="__docker__">🐳 Docker logs (temps réel)</option>
+                            {% if log_files %}
+                                {% for log_file in log_files %}
+                                    <option value="{{ log_file.name }}" data-size="{{ log_file.size_mb }}">
+                                        {{ log_file.name }} ({{ log_file.size_mb }} MB)
+                                    </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+
+                    <div class="log-controls">
+                        <button class="btn primary" onclick="loadLogFile()" id="btn-load-log">Charger le fichier</button>
+                        <button class="btn primary" onclick="startDockerLogs()" id="btn-start-stream" style="display: none;">Démarrer le streaming</button>
+                        <button class="btn danger" onclick="stopDockerLogs()" id="btn-stop-stream" style="display: none;">Arrêter le streaming</button>
+                        <button class="btn" onclick="clearLogViewer()">Effacer</button>
+                        <div class="log-auto-scroll">
+                            <input type="checkbox" id="auto-scroll" checked>
+                            <label class="small" for="auto-scroll">Défilement automatique</label>
+                        </div>
+                    </div>
+
+                    <div id="log-viewer" class="log-viewer" style="display: none;">
+                        <pre id="log-content" class="log-content-pre"></pre>
+                    </div>
+
+                    <div id="log-stream-viewer" class="log-viewer" style="display: none; margin-top: 12px;">
+                        <pre id="log-stream-content" class="log-content-pre"></pre>
+                    </div>
                 </div>
-            {% endif %}
+            </div>
 
-            <form method="post" action="{{ url_for('local.local_plex_add') }}" class="mt-2">
-                <label class="small">Ajouter / mettre à jour un chemin :</label><br>
-                <input class="medium" type="text" name="path" placeholder="ex: anime_vf" required>
-                <input class="medium" type="text" name="languages" placeholder="ex: vf, vj">
-                <button class="btn primary" type="submit">Enregistrer</button>
-            </form>
+            <!-- Onglet Actualités -->
+            <div id="tab-news" class="tab-content">
+                <div class="card mt-4">
+                    <h2 class="section-title">Actualités</h2>
+                    <p class="sub">
+                        Restez informé des dernières mises à jour et nouveautés de Plex Anime Downloader.
+                    </p>
+
+                    {% if news_error %}
+                        <div class="msg error">
+                            ⚠️ {{ news_error }}
+                        </div>
+                    {% endif %}
+
+                    {% if news_list %}
+                        <div class="news-list" style="display: flex; flex-direction: column; gap: 16px;">
+                            {% for news_item in news_list %}
+                                <div class="card" style="margin-bottom: 0; padding: 16px; border-left: 4px solid {% if news_item.type == 'update' %}#667eea{% elif news_item.type == 'warning' %}#f56565{% elif news_item.type == 'info' %}#48bb78{% elif news_item.type == 'announcement' %}#ed8936{% else %}#95a5a6{% endif %};">
+                                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                        <span style="font-size: 1.2rem;">
+                                            {% if news_item.type == 'update' %}🔄
+                                            {% elif news_item.type == 'warning' %}⚠️
+                                            {% elif news_item.type == 'info' %}ℹ️
+                                            {% elif news_item.type == 'announcement' %}📢
+                                            {% else %}💬{% endif %}
+                                        </span>
+                                        <h3 style="margin: 0; flex: 1; font-size: 1.1rem; color: inherit;">
+                                            {{ news_item.title }}
+                                        </h3>
+                                        <span style="background: {% if news_item.type == 'update' %}#667eea{% elif news_item.type == 'warning' %}#f56565{% elif news_item.type == 'info' %}#48bb78{% elif news_item.type == 'announcement' %}#ed8936{% else %}#95a5a6{% endif %}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase;">
+                                            {{ news_item.type or 'message' }}
+                                        </span>
+                                    </div>
+                                    {% if news_item.version %}
+                                        <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 8px;">
+                                            <strong>Version:</strong> {{ news_item.version }}
+                                        </div>
+                                    {% endif %}
+                                    <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 12px;">
+                                        <strong>Publié:</strong> {{ news_item.created_at[:19] }}
+                                    </div>
+                                    <div style="font-size: 0.9rem; color: #555; white-space: pre-wrap; line-height: 1.6;">
+                                        {{ news_item.content }}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% elif not news_error %}
+                        <div class="empty">
+                            <p>Aucune actualité pour le moment.</p>
+                            <p>Les actualités seront affichées ici prochainement.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
+
+    <script>
+        function switchTab(tabName) {
+            // Masquer tous les onglets
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Désactiver tous les boutons
+            document.querySelectorAll('.tab-button-header').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Afficher l'onglet sélectionné
+            document.getElementById('tab-' + tabName).classList.add('active');
+            
+            // Activer le bouton correspondant
+            event.target.classList.add('active');
+        }
+
+        let logEventSource = null;
+
+        function onLogFileChange() {
+            const select = document.getElementById('log-file-select');
+            const value = select.value;
+            const btnLoad = document.getElementById('btn-load-log');
+            const btnStart = document.getElementById('btn-start-stream');
+            const btnStop = document.getElementById('btn-stop-stream');
+            
+            if (value === '__docker__') {
+                btnLoad.style.display = 'none';
+                btnStart.style.display = 'inline-block';
+                btnStop.style.display = 'none';
+            } else if (value) {
+                btnLoad.style.display = 'inline-block';
+                btnStart.style.display = 'none';
+                btnStop.style.display = 'none';
+            } else {
+                btnLoad.style.display = 'inline-block';
+                btnStart.style.display = 'none';
+                btnStop.style.display = 'none';
+            }
+        }
+
+        function loadLogFile() {
+            const select = document.getElementById('log-file-select');
+            const filename = select.value;
+            
+            if (!filename || filename === '__docker__') {
+                alert('Veuillez sélectionner un fichier de log');
+                return;
+            }
+            
+            // Arrêter le streaming si actif
+            if (logEventSource) {
+                logEventSource.close();
+                logEventSource = null;
+            }
+            document.getElementById('log-stream-viewer').style.display = 'none';
+            
+            const viewer = document.getElementById('log-viewer');
+            const content = document.getElementById('log-content');
+            
+            viewer.style.display = 'block';
+            content.textContent = 'Chargement...';
+            
+            fetch(`/local/logs/view/${encodeURIComponent(filename)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.ok) {
+                        // Formater le contenu pour préserver les sauts de ligne
+                        const lines = data.content.split('\n');
+                        content.textContent = lines.join('\n');
+                        if (document.getElementById('auto-scroll').checked) {
+                            setTimeout(() => {
+                                viewer.scrollTop = viewer.scrollHeight;
+                            }, 100);
+                        }
+                    } else {
+                        content.textContent = 'Erreur: ' + data.error;
+                    }
+                })
+                .catch(error => {
+                    content.textContent = 'Erreur lors du chargement: ' + error;
+                });
+        }
+
+        function clearLogViewer() {
+            document.getElementById('log-content').textContent = '';
+            document.getElementById('log-viewer').style.display = 'none';
+            document.getElementById('log-stream-content').textContent = '';
+            document.getElementById('log-stream-viewer').style.display = 'none';
+            if (logEventSource) {
+                logEventSource.close();
+                logEventSource = null;
+            }
+            document.getElementById('btn-stop-stream').style.display = 'none';
+            document.getElementById('btn-start-stream').style.display = 'none';
+        }
+
+        function startDockerLogs() {
+            const select = document.getElementById('log-file-select');
+            const value = select.value;
+            
+            if (!value) {
+                alert('Veuillez sélectionner une source de logs');
+                return;
+            }
+            
+            // Masquer le viewer statique
+            document.getElementById('log-viewer').style.display = 'none';
+            
+            // Arrêter le streaming précédent si actif
+            if (logEventSource) {
+                logEventSource.close();
+            }
+            
+            const streamViewer = document.getElementById('log-stream-viewer');
+            const streamContent = document.getElementById('log-stream-content');
+            const btnStart = document.getElementById('btn-start-stream');
+            const btnStop = document.getElementById('btn-stop-stream');
+            
+            streamViewer.style.display = 'block';
+            streamContent.textContent = '';
+            btnStart.style.display = 'none';
+            btnStop.style.display = 'inline-block';
+            
+            // Déterminer l'URL du streaming
+            let streamUrl;
+            if (value === '__docker__') {
+                streamUrl = '/local/logs/stream/docker';
+            } else {
+                streamUrl = `/local/logs/stream/${encodeURIComponent(value)}`;
+            }
+            
+            logEventSource = new EventSource(streamUrl);
+            
+            logEventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.content) {
+                        streamContent.textContent += data.content;
+                        if (document.getElementById('auto-scroll').checked) {
+                            setTimeout(() => {
+                                streamViewer.scrollTop = streamViewer.scrollHeight;
+                            }, 50);
+                        }
+                    } else if (data.error) {
+                        streamContent.textContent += '\n[Erreur] ' + data.error;
+                    }
+                } catch (e) {
+                    console.error('Erreur parsing SSE:', e);
+                }
+            };
+            
+            logEventSource.onerror = function(error) {
+                console.error('Erreur SSE:', error);
+                if (logEventSource.readyState === EventSource.CLOSED) {
+                    streamContent.textContent += '\n[Connexion fermée]';
+                    btnStart.style.display = 'inline-block';
+                    btnStop.style.display = 'none';
+                }
+            };
+        }
+
+        function stopDockerLogs() {
+            if (logEventSource) {
+                logEventSource.close();
+                logEventSource = null;
+            }
+            document.getElementById('log-stream-viewer').style.display = 'none';
+            document.getElementById('btn-start-stream').style.display = 'inline-block';
+            document.getElementById('btn-stop-stream').style.display = 'none';
+        }
+
+        // Auto-scroll pour le viewer de logs
+        document.getElementById('log-viewer').addEventListener('scroll', function() {
+            const autoScroll = document.getElementById('auto-scroll');
+            if (this.scrollTop + this.clientHeight < this.scrollHeight - 10) {
+                autoScroll.checked = false;
+            }
+        });
+    </script>
 </body>
 </html>
-
-

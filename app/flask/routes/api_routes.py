@@ -4,9 +4,16 @@ Routes pour l'API JSON (extension navigateur)
 from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash
 from app.flask.themes import get_theme_colors, get_available_themes
+import os
+
+# Variable globale pour stocker system (sera définie lors de la création du blueprint)
+system = None
 
 
 def create_api_blueprint(helpers, queue_manager=None, system=None):
+    # Stocker system dans le scope du module pour l'utiliser dans api_news
+    import app.flask.routes.api_routes as api_module
+    api_module.system = system
     """
     Crée le blueprint pour les routes API.
     

@@ -10,6 +10,9 @@ from flask import (
     session,
     flash,
     send_file,
+    jsonify,
+    Response,
+    stream_with_context,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
@@ -18,7 +21,10 @@ import shutil
 import zipfile
 import tempfile
 import configparser
+import json
+import time
 from app.flask.themes import get_theme_css, get_available_themes, get_login_page_css
+import threading
 
 
 def create_local_blueprint(helpers, app_config, plex_root, config_path, local_admin_password_hash, system=None):
@@ -34,6 +40,53 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         system: Instance de check_sys pour accéder au thème
     """
     local_bp = Blueprint("local", __name__)
+    
+    # Variable pour suivre si le thread de ping est déjà démarré
+    _ping_thread_started = False
+    _ping_thread_lock = threading.Lock()
+    
+    def ping_news_server():
+        """Fait un ping périodique vers le serveur d'actualités pour le tracking"""
+        import requests
+        
+        while True:
+            try:
+                time.sleep(300)  # Ping toutes les 5 minutes
+                
+                news_api_url = os.getenv("NEWS_API_URL", "https://newspad.maddoxserv.com/api/news")
+                if not news_api_url:
+                    continue
+                
+                # Préparer les headers pour le tracking
+                headers = {}
+                if system:
+                    server_id = getattr(system, 'server_id', None)
+                    if server_id:
+                        headers["X-Server-ID"] = server_id
+                    version = getattr(system, 'version', None) or os.getenv("APP_VERSION", "unknown")
+                    if version:
+                        headers["X-Server-Version"] = version
+                
+                # Faire un ping simple (juste pour le tracking)
+                try:
+                    requests.get(news_api_url, headers=headers, timeout=3)
+                except:
+                    pass  # Ignorer les erreurs de connexion
+                    
+            except Exception as e:
+                # En cas d'erreur, continuer quand même
+                pass
+    
+    def start_ping_thread():
+        """Démarre le thread de ping si ce n'est pas déjà fait"""
+        nonlocal _ping_thread_started
+        with _ping_thread_lock:
+            if not _ping_thread_started and system:
+                ping_thread = threading.Thread(target=ping_news_server, daemon=True)
+                ping_thread.start()
+                _ping_thread_started = True
+                if system and hasattr(system, 'logger'):
+                    system.logger.info("Thread de ping automatique vers le serveur d'actualités démarré")
     
     # Durée d'expiration de session : 5 minutes
     SESSION_TIMEOUT = timedelta(minutes=5)
@@ -109,6 +162,9 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         if not session.get("local_authenticated"):
             flash("Vous devez être connecté avec le mot de passe admin.", "error")
             return redirect(url_for("local.local_login"))
+        
+        # Démarrer le thread de ping automatique si ce n'est pas déjà fait
+        start_ping_thread()
 
         conn = helpers.get_db_connection()
         users = conn.execute("SELECT username FROM users ORDER BY username").fetchall()
@@ -124,6 +180,51 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         
         theme_css = get_theme_css(current_theme)
         available_themes = get_available_themes()
+        
+        # Récupérer la liste des fichiers de logs
+        log_files = []
+        if system:
+            logs_path = system.logs_path
+            if os.path.exists(logs_path):
+                for file in os.listdir(logs_path):
+                    if file.endswith('.log'):
+                        file_path = os.path.join(logs_path, file)
+                        file_size = os.path.getsize(file_path)
+                        log_files.append({
+                            'name': file,
+                            'size': file_size,
+                            'size_mb': round(file_size / (1024 * 1024), 2)
+                        })
+        
+        # Récupérer les actualités depuis le serveur externe et enregistrer le serveur
+        news_list = []
+        news_error = None
+        try:
+            import requests
+            news_api_url = os.getenv("NEWS_API_URL", "https://newspad.maddoxserv.com/api/news")
+            
+            # Préparer les headers pour le tracking
+            headers = {}
+            if system:
+                server_id = getattr(system, 'server_id', None)
+                if server_id:
+                    headers["X-Server-ID"] = server_id
+                version = getattr(system, 'version', None) or os.getenv("APP_VERSION", "unknown")
+                if version:
+                    headers["X-Server-Version"] = version
+            
+            # Faire la requête avec les headers de tracking
+            response = requests.get(news_api_url, headers=headers, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("ok"):
+                    news_list = data.get("news", [])
+                else:
+                    news_error = data.get("error", "Erreur inconnue")
+            else:
+                news_error = f"Erreur HTTP {response.status_code}"
+        except Exception as e:
+            news_error = f"Impossible de récupérer les actualités: {str(e)}"
 
         return render_template(
             "local_dashboard.html",
@@ -135,6 +236,10 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
             theme_css=theme_css,
             current_theme=current_theme,
             available_themes=available_themes,
+            log_files=log_files,
+            logs_path=system.logs_path if system else None,
+            news_list=news_list,
+            news_error=news_error,
         )
 
     @local_bp.route("/local/users/create", methods=["POST"])
@@ -230,6 +335,210 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         
         flash(f"Thème changé pour '{available_themes[theme_name]}'.", "success")
         return redirect(url_for("local.local_dashboard"))
+
+    @local_bp.route("/local/logs/list", methods=["GET"])
+    def local_logs_list():
+        """Retourne la liste des fichiers de logs"""
+        if not session.get("local_authenticated"):
+            return jsonify({"ok": False, "error": "Non autorisé"}), 401
+        
+        if not system:
+            return jsonify({"ok": False, "error": "Système non disponible"}), 500
+        
+        logs_path = system.logs_path
+        log_files = []
+        if os.path.exists(logs_path):
+            for file in os.listdir(logs_path):
+                if file.endswith('.log'):
+                    file_path = os.path.join(logs_path, file)
+                    if os.path.isfile(file_path):
+                        file_size = os.path.getsize(file_path)
+                        log_files.append({
+                            'name': file,
+                            'size': file_size,
+                            'size_mb': round(file_size / (1024 * 1024), 2)
+                        })
+        
+        return jsonify({"ok": True, "files": log_files}), 200
+
+    @local_bp.route("/local/logs/view/<filename>", methods=["GET"])
+    def local_logs_view(filename):
+        """Retourne le contenu d'un fichier de log"""
+        if not session.get("local_authenticated"):
+            return jsonify({"ok": False, "error": "Non autorisé"}), 401
+        
+        if not system:
+            return jsonify({"ok": False, "error": "Système non disponible"}), 500
+        
+        # Sécuriser le nom de fichier
+        filename = os.path.basename(filename)
+        if not filename.endswith('.log'):
+            return jsonify({"ok": False, "error": "Fichier invalide"}), 400
+        
+        logs_path = system.logs_path
+        file_path = os.path.join(logs_path, filename)
+        
+        if not os.path.exists(file_path) or not os.path.isfile(file_path):
+            return jsonify({"ok": False, "error": "Fichier non trouvé"}), 404
+        
+        try:
+            # Lire les dernières lignes (dernières 1000 lignes pour performance)
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+                # Prendre les 1000 dernières lignes
+                lines = lines[-1000:] if len(lines) > 1000 else lines
+                content = ''.join(lines)
+            
+            return jsonify({
+                "ok": True,
+                "filename": filename,
+                "content": content,
+                "total_lines": len(lines)
+            }), 200
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @local_bp.route("/local/logs/stream/<filename>", methods=["GET"])
+    def local_logs_stream(filename):
+        """Stream les logs en temps réel (Server-Sent Events)"""
+        if not session.get("local_authenticated"):
+            return jsonify({"ok": False, "error": "Non autorisé"}), 401
+        
+        if not system:
+            return jsonify({"ok": False, "error": "Système non disponible"}), 500
+        
+        # Gérer les logs Docker
+        if filename == "docker":
+            return local_logs_stream_docker()
+        
+        # Sécuriser le nom de fichier
+        filename = os.path.basename(filename)
+        if not filename.endswith('.log'):
+            return jsonify({"ok": False, "error": "Fichier invalide"}), 400
+        
+        logs_path = system.logs_path
+        file_path = os.path.join(logs_path, filename)
+        
+        if not os.path.exists(file_path) or not os.path.isfile(file_path):
+            return jsonify({"ok": False, "error": "Fichier non trouvé"}), 404
+        
+        def generate():
+            last_position = os.path.getsize(file_path)
+            while True:
+                try:
+                    current_size = os.path.getsize(file_path)
+                    if current_size > last_position:
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            f.seek(last_position)
+                            new_content = f.read()
+                            if new_content:
+                                yield f"data: {json.dumps({'content': new_content})}\n\n"
+                            last_position = current_size
+                    elif current_size < last_position:
+                        # Fichier tronqué ou réinitialisé
+                        last_position = 0
+                    time.sleep(0.5)  # Vérifier toutes les 0.5 secondes
+                except Exception as e:
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                    break
+        
+        return Response(
+            stream_with_context(generate()),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no'
+            }
+        )
+
+    def local_logs_stream_docker():
+        """Stream les logs de l'application en temps réel (tous les fichiers de logs combinés)"""
+        if not system:
+            def generate_error():
+                yield f"data: {json.dumps({'error': 'Système non disponible'})}\n\n"
+            return Response(
+                stream_with_context(generate_error()),
+                mimetype='text/event-stream',
+                headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'}
+            )
+        
+        logs_path = system.logs_path
+        log_files = ['sys.log', 'flask.log', 'download.log', 'queue.log', 'anime-sama.log', 'franime.log']
+        
+        def generate():
+            file_positions = {}
+            
+            try:
+                # Initialiser les positions pour tous les fichiers existants
+                for log_file in log_files:
+                    file_path = os.path.join(logs_path, log_file)
+                    if os.path.exists(file_path):
+                        try:
+                            file_positions[log_file] = os.path.getsize(file_path)
+                        except Exception:
+                            file_positions[log_file] = 0
+                
+                if not file_positions:
+                    yield f"data: {json.dumps({'error': 'Aucun fichier de log trouvé'})}\n\n"
+                    return
+                
+                # Envoyer un message de démarrage
+                start_msg = '=== Démarrage du streaming des logs ===\n'
+                yield f"data: {json.dumps({'content': start_msg})}\n\n"
+                
+                # Streamer les nouveaux logs de tous les fichiers
+                while True:
+                    any_new_content = False
+                    for log_file in list(file_positions.keys()):
+                        file_path = os.path.join(logs_path, log_file)
+                        
+                        if not os.path.exists(file_path):
+                            # Fichier supprimé, retirer de la liste
+                            del file_positions[log_file]
+                            continue
+                        
+                        try:
+                            current_size = os.path.getsize(file_path)
+                            last_position = file_positions[log_file]
+                            
+                            if current_size > last_position:
+                                # Nouveau contenu disponible
+                                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                    f.seek(last_position)
+                                    new_content = f.read()
+                                    if new_content:
+                                        # Préfixer avec le nom du fichier pour identifier la source
+                                        lines = new_content.split('\n')
+                                        for line in lines:
+                                            if line.strip():
+                                                prefixed_line = f"[{log_file}] {line}\n"
+                                                yield f"data: {json.dumps({'content': prefixed_line})}\n\n"
+                                                any_new_content = True
+                                file_positions[log_file] = current_size
+                            elif current_size < last_position:
+                                # Fichier tronqué ou réinitialisé
+                                file_positions[log_file] = 0
+                        except Exception as e:
+                            # Erreur lors de la lecture, continuer avec les autres fichiers
+                            pass
+                    
+                    if not any_new_content:
+                        time.sleep(0.5)  # Attendre 0.5 seconde si pas de nouveau contenu
+                    else:
+                        time.sleep(0.1)  # Attendre moins longtemps si on a du nouveau contenu
+                        
+            except Exception as e:
+                error_msg = f"Erreur lors du streaming: {str(e)}"
+                yield f"data: {json.dumps({'error': error_msg})}\n\n"
+        
+        return Response(
+            stream_with_context(generate()),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no'
+            }
+        )
 
     @local_bp.route("/local/plex/add", methods=["POST"])
     def local_plex_add():

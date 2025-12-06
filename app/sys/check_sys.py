@@ -6,6 +6,15 @@ from .function import create_path
 from .logger import sys_logger
 from .database import database
 
+# Liste des versions connues/valides
+KNOWN_VERSIONS = [
+    "beta-0.6.3",
+    # Ajoutez ici les nouvelles versions ici
+]
+
+# Version par défaut (dernière version stable)
+DEFAULT_VERSION = "beta-0.6.3"
+
 
 class check_sys:
     def __init__(self):
@@ -38,6 +47,10 @@ class check_sys:
         create_path(path=self.database_path)
         self.logger.info("Database path Loaded/created")
 
+        # Générer ou charger le server_id unique
+        self.server_id = self._get_or_create_server_id()
+        self.logger.info(f"Server ID: {self.server_id}")
+
         self.logger.info("loading config")
 
         self.config = None
@@ -48,6 +61,7 @@ class check_sys:
         self.threads = None
         self.timer = None
         self.theme = None
+        self.version = None
 
         self.load_config()
         self.logger.info(f"file loaded: {self.config}, {self.anime_json}, {self.plex_path_file}, {self.plex_database}")
@@ -67,7 +81,9 @@ class check_sys:
             config.set('scan-option', 'franime', 'False')
             config.add_section('ui')
             config.set('ui', 'theme', 'neon-cyberpunk')
-            with open(config_file, 'w') as configfile:
+            config.add_section('app')
+            config.set('app', 'version', DEFAULT_VERSION)
+            with open(config_file, 'w', encoding='utf-8') as configfile:
                 config.write(configfile)
             self.logger.info("Fichier de configuration créé")
         
@@ -82,10 +98,33 @@ class check_sys:
         if not config.has_section('ui'):
             config.add_section('ui')
             config.set('ui', 'theme', 'neon-cyberpunk')
-            with open(config_file, 'w') as configfile:
+            with open(config_file, 'w', encoding='utf-8') as configfile:
                 config.write(configfile)
         
         self.theme = config.get('ui', 'theme', fallback='neon-cyberpunk')
+        
+        # Gestion de la version
+        if not config.has_section('app'):
+            config.add_section('app')
+            config.set('app', 'version', DEFAULT_VERSION)
+            with open(config_file, 'w', encoding='utf-8') as configfile:
+                config.write(configfile)
+        
+        # Récupérer la version depuis config.conf
+        config_version = config.get('app', 'version', fallback=DEFAULT_VERSION).strip()
+        
+        # Vérifier si la version est valide (dans la liste des versions connues)
+        if config_version not in KNOWN_VERSIONS:
+            # Version inconnue, utiliser la version par défaut
+            self.logger.warning(f"Version inconnue '{config_version}' détectée dans config.conf. Utilisation de la version par défaut: {DEFAULT_VERSION}")
+            config_version = DEFAULT_VERSION
+            # Mettre à jour config.conf avec la version valide
+            config.set('app', 'version', DEFAULT_VERSION)
+            with open(config_file, 'w', encoding='utf-8') as configfile:
+                config.write(configfile)
+        
+        self.version = config_version
+        self.logger.info(f"Version de l'application: {self.version}")
         
         self.config = config_file
         
@@ -198,5 +237,25 @@ class check_sys:
 
         self.plex_database = plex_database
 
-
+    def _get_or_create_server_id(self):
+        """Génère ou récupère un identifiant unique pour ce serveur"""
+        import uuid
+        import json
+        
+        server_id_file = os.path.join(self.database_path, "server_id.json")
+        
+        try:
+            if os.path.exists(server_id_file):
+                with open(server_id_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return data.get("server_id", str(uuid.uuid4()))
+            else:
+                # Générer un nouveau server_id
+                server_id = str(uuid.uuid4())
+                with open(server_id_file, 'w', encoding='utf-8') as f:
+                    json.dump({"server_id": server_id}, f, indent=2)
+                return server_id
+        except Exception as e:
+            self.logger.warning(f"Erreur lors de la gestion du server_id: {e}, génération d'un nouveau")
+            return str(uuid.uuid4())
 
