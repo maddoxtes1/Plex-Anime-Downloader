@@ -23,6 +23,7 @@ const statusText = document.getElementById("status-text");
 let currentUser = null;
 let currentServer = null;
 let statusCheckInterval = null;
+let appInfo = null;
 
 function showView(name) {
   viewServer.classList.add("hidden");
@@ -98,10 +99,149 @@ function updateServerStatus(connected, text) {
   }
 }
 
+async function loadTheme() {
+  if (!currentServer) return null;
+  
+  try {
+    const resp = await fetch(currentServer + "/api/theme");
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.ok && data.colors) {
+        applyTheme(data.colors);
+        return data.colors;
+      }
+    }
+  } catch (e) {
+    console.error("Erreur lors du chargement du thème:", e);
+  }
+  return null;
+}
+
+function applyTheme(colors) {
+  const root = document.documentElement;
+  root.style.setProperty('--bg-primary', colors.bg_primary);
+  root.style.setProperty('--bg-secondary', colors.bg_secondary);
+  root.style.setProperty('--bg-card', colors.bg_card);
+  root.style.setProperty('--accent-primary', colors.accent_primary);
+  root.style.setProperty('--accent-secondary', colors.accent_secondary);
+  root.style.setProperty('--accent-tertiary', colors.accent_tertiary);
+  root.style.setProperty('--text-primary', colors.text_primary);
+  root.style.setProperty('--text-secondary', colors.text_secondary);
+  root.style.setProperty('--border', colors.border);
+  root.style.setProperty('--success', colors.success);
+  root.style.setProperty('--error', colors.error);
+  
+  // Appliquer les couleurs au body
+  document.body.style.background = `linear-gradient(135deg, ${colors.bg_primary} 0%, ${colors.bg_secondary} 100%)`;
+  document.body.style.color = colors.text_primary;
+  
+  // Appliquer les couleurs aux sections
+  const sections = document.querySelectorAll('.section');
+  sections.forEach(section => {
+    section.style.background = colors.bg_card;
+    section.style.color = colors.text_primary;
+    section.style.border = `1px solid ${colors.border}`;
+  });
+  
+  // Appliquer les couleurs aux boutons
+  const buttons = document.querySelectorAll('button');
+  buttons.forEach(button => {
+    if (!button.classList.contains('secondary')) {
+      button.style.background = `linear-gradient(135deg, ${colors.accent_primary}, ${colors.accent_secondary})`;
+    }
+  });
+  
+  // Appliquer les couleurs aux inputs
+  const inputs = document.querySelectorAll('input');
+  inputs.forEach(input => {
+    input.style.background = colors.bg_card;
+    input.style.border = `1px solid ${colors.border}`;
+    input.style.color = colors.text_primary;
+  });
+  
+  // Appliquer les couleurs aux liens d'accès rapide
+  const quickLinks = document.querySelectorAll('#quick-access a');
+  quickLinks.forEach(link => {
+    link.style.background = `rgba(${hexToRgb(colors.accent_primary)}, 0.1)`;
+    link.style.border = `1px solid rgba(${hexToRgb(colors.accent_primary)}, 0.3)`;
+    link.addEventListener('mouseenter', () => {
+      link.style.background = `rgba(${hexToRgb(colors.accent_primary)}, 0.2)`;
+      link.style.transform = 'translateY(-2px)';
+    });
+    link.addEventListener('mouseleave', () => {
+      link.style.background = `rgba(${hexToRgb(colors.accent_primary)}, 0.1)`;
+      link.style.transform = 'translateY(0)';
+    });
+  });
+}
+
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? 
+    `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : 
+    '0, 212, 255';
+}
+
+async function loadAppInfo() {
+  if (!currentServer) return null;
+  
+  try {
+    const resp = await fetch(currentServer + "/api/app-info");
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.ok) {
+        return data;
+      }
+    }
+  } catch (e) {
+    console.error("Erreur lors du chargement des infos de l'app:", e);
+  }
+  // Valeurs par défaut
+  return {
+    app_name: "Plex Anime Downloader",
+    local_dashboard_port: 5001,
+    anime_sama_url: "https://anime-sama.eu"
+  };
+}
+
 async function loadDashboard() {
   if (!currentServer || !currentUser) {
     showView("login");
     return;
+  }
+
+  // Charger le thème
+  await loadTheme();
+
+  // Charger les infos de l'application
+  appInfo = await loadAppInfo();
+  
+  // Mettre à jour le nom de l'application
+  const appNameEl = document.getElementById("app-name");
+  if (appNameEl && appInfo) {
+    appNameEl.textContent = appInfo.app_name || "Plex Anime Downloader";
+    // Mettre à jour aussi le titre de la page
+    document.title = appInfo.app_name || "Plex Anime Downloader";
+  }
+  
+  // Mettre à jour le lien du dashboard local
+  const linkDashboard = document.getElementById("link-dashboard");
+  if (linkDashboard && currentServer) {
+    // Extraire l'URL de base (sans le port API)
+    try {
+      const url = new URL(currentServer);
+      const dashboardUrl = `${url.protocol}//${url.hostname}:${appInfo?.local_dashboard_port || 5001}`;
+      linkDashboard.href = dashboardUrl;
+    } catch (e) {
+      // Si l'URL n'est pas valide, utiliser localhost
+      linkDashboard.href = `http://localhost:${appInfo?.local_dashboard_port || 5001}`;
+    }
+  }
+  
+  // Mettre à jour le lien anime-sama
+  const linkAnimeSama = document.getElementById("link-anime-sama");
+  if (linkAnimeSama && appInfo) {
+    linkAnimeSama.href = appInfo.anime_sama_url || "https://anime-sama.eu";
   }
 
   // Vérifier le statut du serveur
@@ -126,7 +266,21 @@ async function loadDashboard() {
 
     dashboardTitle.textContent = title;
     dashboardMessage.textContent = message;
-    dashboardInfo.textContent = `Connecté en tant que ${currentUser} sur ${currentServer}`;
+    
+    // Extraire l'IP du serveur depuis l'URL
+    let serverDisplay = currentServer;
+    try {
+      const url = new URL(currentServer);
+      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+        serverDisplay = 'localhost';
+      } else {
+        serverDisplay = url.hostname;
+      }
+    } catch (e) {
+      // Si l'URL n'est pas valide, utiliser tel quel
+    }
+    
+    dashboardInfo.textContent = `Connecté sur ${serverDisplay}`;
 
     showView("dashboard");
   } catch (e) {
@@ -152,6 +306,8 @@ btnTest.addEventListener("click", async () => {
     if (data.ok) {
       currentServer = url;
       await saveState();
+      // Charger le thème après connexion réussie
+      await loadTheme();
       setMessage(serverMessage, "Connexion réussie au serveur.", "success");
       showView("login");
     } else {
