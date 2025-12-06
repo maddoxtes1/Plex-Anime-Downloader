@@ -74,7 +74,7 @@ docker-compose logs -f
 
 # Tutoriel
 
-[Comment installer et télécharger des animes avec la beta-0.6.1](https://youtu.be/dXu000JrCRc)
+[Comment installer et télécharger des animes avec la beta-0.6.2](https://youtu.be/dXu000JrCRc)
 
 Si vous rencontrez des problèmes avec mon application Docker ou si vous trouvez des bugs, rendez-vous sur le serveur Discord et je vous répondrai plus rapidement.
 
