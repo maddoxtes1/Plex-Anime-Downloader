@@ -47,6 +47,7 @@ class check_sys:
         self.scan_option_list = None
         self.threads = None
         self.timer = None
+        self.theme = None
 
         self.load_config()
         self.logger.info(f"file loaded: {self.config}, {self.anime_json}, {self.plex_path_file}, {self.plex_database}")
@@ -64,6 +65,8 @@ class check_sys:
             config.add_section('scan-option')
             config.set('scan-option', 'anime-sama', 'True')
             config.set('scan-option', 'franime', 'False')
+            config.add_section('ui')
+            config.set('ui', 'theme', 'neon-cyberpunk')
             with open(config_file, 'w') as configfile:
                 config.write(configfile)
             self.logger.info("Fichier de configuration créé")
@@ -74,6 +77,15 @@ class check_sys:
         self.threads = int(config.get('settings', 'threads'))
         self.timer = int(config.get('settings', 'timer'))
         self.scan_option_list = [bool(config['scan-option']['anime-sama']), bool(config['scan-option']['franime'])]
+        
+        # Gestion du thème
+        if not config.has_section('ui'):
+            config.add_section('ui')
+            config.set('ui', 'theme', 'neon-cyberpunk')
+            with open(config_file, 'w') as configfile:
+                config.write(configfile)
+        
+        self.theme = config.get('ui', 'theme', fallback='neon-cyberpunk')
         
         self.config = config_file
         

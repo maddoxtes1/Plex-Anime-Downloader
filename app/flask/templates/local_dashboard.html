@@ -5,177 +5,7 @@
     <title>Dashboard local - Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #020617;
-            color: #e5e7eb;
-            margin: 0;
-            min-height: 100vh;
-        }
-        header {
-            background: #0f172a;
-            padding: 12px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #1e293b;
-        }
-        header h1 {
-            font-size: 1.1rem;
-            margin: 0;
-        }
-        header .right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.8rem;
-            color: #9ca3af;
-        }
-        header a {
-            color: #e5e7eb;
-            text-decoration: none;
-            padding: 5px 8px;
-            border-radius: 999px;
-            border: 1px solid #374151;
-        }
-        header a:hover {
-            background: #111827;
-        }
-        .wrapper {
-            max-width: 900px;
-            margin: 24px auto;
-            padding: 0 16px 32px;
-        }
-        .card {
-            background: #020617;
-            border-radius: 14px;
-            border: 1px solid #1f2937;
-            padding: 18px 20px;
-            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.8);
-        }
-        h2 {
-            font-size: 1rem;
-            margin: 0 0 8px;
-        }
-        p {
-            font-size: 0.9rem;
-            color: #9ca3af;
-            margin: 0 0 14px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.9rem;
-        }
-        th, td {
-            padding: 8px 6px;
-            text-align: left;
-        }
-        th {
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: #9ca3af;
-            border-bottom: 1px solid #1f2937;
-        }
-        tr:nth-child(even) td {
-            background: #020617;
-        }
-        tr:nth-child(odd) td {
-            background: #030712;
-        }
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 999px;
-            font-size: 0.75rem;
-            background: rgba(34, 197, 94, 0.12);
-            color: #bbf7d0;
-            border: 1px solid rgba(34, 197, 94, 0.35);
-        }
-        .messages {
-            margin-bottom: 12px;
-        }
-        .msg {
-            font-size: 0.8rem;
-            padding: 6px 8px;
-            border-radius: 8px;
-            margin-bottom: 4px;
-        }
-        .msg.error {
-            background: rgba(248, 113, 113, 0.15);
-            color: #fecaca;
-        }
-        .msg.success {
-            background: rgba(34, 197, 94, 0.12);
-            color: #bbf7d0;
-        }
-        .empty {
-            font-size: 0.85rem;
-            color: #6b7280;
-            margin-top: 4px;
-        }
-        .section-title {
-            margin-top: 4px;
-            margin-bottom: 4px;
-        }
-        .sub {
-            font-size: 0.8rem;
-            color: #6b7280;
-            margin-bottom: 10px;
-        }
-        form.inline {
-            display: inline;
-        }
-        label.small {
-            font-size: 0.8rem;
-            color: #9ca3af;
-            margin-right: 6px;
-        }
-        input[type="text"],
-        input[type="number"],
-        input[type="password"] {
-            background: #020617;
-            border-radius: 8px;
-            border: 1px solid #374151;
-            color: #e5e7eb;
-            padding: 4px 6px;
-            font-size: 0.85rem;
-        }
-        input.short {
-            width: 70px;
-        }
-        input.medium {
-            width: 140px;
-        }
-        button.btn {
-            border-radius: 999px;
-            border: 1px solid #4b5563;
-            background: #111827;
-            color: #e5e7eb;
-            padding: 4px 10px;
-            font-size: 0.8rem;
-            cursor: pointer;
-        }
-        button.btn.primary {
-            border-color: #4f46e5;
-            background: linear-gradient(135deg, #4f46e5, #22c55e);
-        }
-        button.btn.danger {
-            border-color: #b91c1c;
-            color: #fecaca;
-        }
-        .mt-2 { margin-top: 8px; }
-        .mt-3 { margin-top: 12px; }
-        .mt-4 { margin-top: 16px; }
-        .mb-2 { margin-bottom: 8px; }
-        .mb-3 { margin-bottom: 12px; }
-        code {
-            font-size: 0.8rem;
-            background: #020617;
-            padding: 2px 4px;
-            border-radius: 4px;
-        }
+        {{ theme_css|safe }}
     </style>
 </head>
 <body>
@@ -240,6 +70,26 @@
                 <button class="btn primary" type="submit">Créer</button>
             </form>
 
+        </div>
+
+        <div class="card mt-4">
+            <h2 class="section-title">Thème de l'interface</h2>
+            <p class="sub">
+                Choisissez le thème visuel pour le dashboard et l'extension.
+            </p>
+            <form method="post" action="{{ url_for('local.local_update_theme') }}">
+                <div class="mb-2">
+                    <label class="small" for="theme">Thème actuel :</label>
+                    <select name="theme" id="theme" style="width: 200px;">
+                        {% for theme_key, theme_name in available_themes.items() %}
+                            <option value="{{ theme_key }}" {% if theme_key == current_theme %}selected{% endif %}>
+                                {{ theme_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button class="btn primary" type="submit">Changer le thème</button>
+            </form>
         </div>
 
         <div class="card mt-4">

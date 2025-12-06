@@ -17,9 +17,11 @@ import os
 import shutil
 import zipfile
 import tempfile
+import configparser
+from app.flask.themes import get_theme_css, get_available_themes, get_login_page_css
 
 
-def create_local_blueprint(helpers, app_config, plex_root, config_path, local_admin_password_hash):
+def create_local_blueprint(helpers, app_config, plex_root, config_path, local_admin_password_hash, system=None):
     """
     Crée le blueprint pour les routes locales.
     
@@ -29,6 +31,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         plex_root: Chemin racine Plex
         config_path: Chemin vers le dossier de configuration
         local_admin_password_hash: Hash du mot de passe admin local
+        system: Instance de check_sys pour accéder au thème
     """
     local_bp = Blueprint("local", __name__)
     
@@ -86,7 +89,14 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
                 except Exception as e:
                     flash(f"Erreur lors de la vérification du mot de passe: {str(e)}", "error")
 
-        return render_template("access.html")
+        # Récupérer le thème actuel pour la page de connexion
+        current_theme = "neon-cyberpunk"
+        if system:
+            current_theme = system.theme or "neon-cyberpunk"
+        
+        login_theme_css = get_login_page_css(current_theme)
+
+        return render_template("access.html", theme_css=login_theme_css)
 
     @local_bp.route("/local/dashboard")
     def local_dashboard():
@@ -106,6 +116,14 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
 
         cfg = helpers.load_config_conf()
         plex_entries = helpers.load_plex_paths()
+        
+        # Récupérer le thème actuel
+        current_theme = "neon-cyberpunk"
+        if system:
+            current_theme = system.theme or "neon-cyberpunk"
+        
+        theme_css = get_theme_css(current_theme)
+        available_themes = get_available_themes()
 
         return render_template(
             "local_dashboard.html",
@@ -114,6 +132,9 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
             plex_entries=plex_entries,
             plex_root=plex_root,
             CONFIG_PATH=config_path,
+            theme_css=theme_css,
+            current_theme=current_theme,
+            available_themes=available_themes,
         )
 
     @local_bp.route("/local/users/create", methods=["POST"])
@@ -172,6 +193,42 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
 
         helpers.save_config_conf(threads, timer, anime_sama, franime)
         flash("Configuration sauvegardée.", "success")
+        return redirect(url_for("local.local_dashboard"))
+
+    @local_bp.route("/local/theme", methods=["POST"])
+    def local_update_theme():
+        if not session.get("local_authenticated"):
+            flash("Non autorisé.", "error")
+            return redirect(url_for("local.local_login"))
+
+        theme_name = (request.form.get("theme") or "").strip()
+        if not theme_name:
+            flash("Thème manquant.", "error")
+            return redirect(url_for("local.local_dashboard"))
+
+        # Vérifier que le thème existe
+        available_themes = get_available_themes()
+        if theme_name not in available_themes:
+            flash("Thème invalide.", "error")
+            return redirect(url_for("local.local_dashboard"))
+
+        # Sauvegarder le thème dans config.conf
+        if system and system.config:
+            config = configparser.ConfigParser(allow_no_value=True)
+            config.read(system.config, encoding='utf-8')
+            
+            if not config.has_section('ui'):
+                config.add_section('ui')
+            
+            config.set('ui', 'theme', theme_name)
+            
+            with open(system.config, 'w', encoding='utf-8') as configfile:
+                config.write(configfile)
+            
+            # Mettre à jour le thème dans system
+            system.theme = theme_name
+        
+        flash(f"Thème changé pour '{available_themes[theme_name]}'.", "success")
         return redirect(url_for("local.local_dashboard"))
 
     @local_bp.route("/local/plex/add", methods=["POST"])

@@ -3,6 +3,7 @@ Routes pour l'API JSON (extension navigateur)
 """
 from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash
+from app.flask.themes import get_theme_colors, get_available_themes
 
 
 def create_api_blueprint(helpers, queue_manager=None, system=None):
@@ -219,6 +220,31 @@ def create_api_blueprint(helpers, queue_manager=None, system=None):
 
         except Exception as e:
             return jsonify({"ok": False, "error": f"Erreur lors de la suppression: {str(e)}"}), 500
+
+    @api_bp.route("/theme", methods=["GET"])
+    def api_get_theme():
+        """Retourne le thème actuel et ses couleurs pour l'extension."""
+        if not system:
+            return jsonify({"ok": False, "error": "Système non disponible"}), 500
+        
+        current_theme = system.theme or "neon-cyberpunk"
+        theme_colors = get_theme_colors(current_theme)
+        
+        return jsonify({
+            "ok": True,
+            "theme": current_theme,
+            "colors": theme_colors
+        }), 200
+
+    @api_bp.route("/app-info", methods=["GET"])
+    def api_get_app_info():
+        """Retourne les informations de l'application pour l'extension."""
+        return jsonify({
+            "ok": True,
+            "app_name": "Plex Anime Downloader",
+            "local_dashboard_port": 5001,
+            "anime_sama_url": "https://anime-sama.eu"
+        }), 200
 
     return api_bp
 
