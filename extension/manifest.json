@@ -27,8 +27,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://anime-sama.org/planning/*",
-        "https://anime-sama.org/catalogue/*/saison*/*"
+        "https://anime-sama.eu/planning/*",
+        "https://anime-sama.eu/catalogue/*/saison*/*"
       ],
       "js": ["content.js"],
       "css": ["content.css"]

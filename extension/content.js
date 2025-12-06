@@ -1,4 +1,4 @@
-// Content script pour ajouter des boutons "Add to download" sur anime-sama.org/planning/
+// Content script pour ajouter des boutons "Add to download" sur anime-sama.eu/planning/
 
 // Fonction pour obtenir les informations de l'extension
 async function getExtensionConfig() {

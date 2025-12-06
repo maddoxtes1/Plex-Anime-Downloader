@@ -6,7 +6,7 @@ J'ai un serveur Plex et j'aime les animes. J'avais la flemme de télécharger ma
 
 - ✅ Télécharger automatiquement les animes
 - ✅ Contrôler l'application avec une extension web
-- ❌ Télécharger depuis plusieurs sites de streaming (pour le moment, cela fonctionne uniquement avec [https://anime-sama.org/])
+- ❌ Télécharger depuis plusieurs sites de streaming (pour le moment, cela fonctionne uniquement avec [https://anime-sama.eu/])
 - ❌ Support d'un VPN pour les téléchargements
 
 ## Prérequis
@@ -70,7 +70,7 @@ docker-compose logs -f
 1. Accédez à http://localhost:5001 pour configurer le serveur
 2. Connectez-vous avec le mot de passe défini dans `LOCAL_ADMIN_PASSWORD`
 3. Téléchargez l'extension via le dashboard local et ajoutez-la à votre navigateur
-4. Une fois connecté à votre serveur avec l'extension, allez sur https://anime-sama.org pour télécharger des animes 
+4. Une fois connecté à votre serveur avec l'extension, allez sur https://anime-sama.eu pour télécharger des animes 
 
 
 

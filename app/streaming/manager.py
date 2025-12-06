@@ -136,11 +136,11 @@ class streaming_manager:
                             for current_season in range(1, nombre_parts + 1):
                                 if current_season == 1:
                                     # Si c'est la première itération, utiliser juste saison{base} (sans -1)
-                                    url = f"https://anime-sama.org/catalogue/{name}/saison{season_base}/{langage}/episodes.js"
+                                    url = f"https://anime-sama.eu/catalogue/{name}/saison{season_base}/{langage}/episodes.js"
                                     season_for_object = season_base
                                 else:
                                     # Sinon, utiliser saison{base}-{current_season}
-                                    url = f"https://anime-sama.org/catalogue/{name}/saison{season_base}-{current_season}/{langage}/episodes.js"
+                                    url = f"https://anime-sama.eu/catalogue/{name}/saison{season_base}-{current_season}/{langage}/episodes.js"
                                     season_for_object = f"{season_base}-{current_season}"
                                 
                                 # Ajouter à la liste avec un numéro (1, 2, 3, etc.)
@@ -155,7 +155,7 @@ class streaming_manager:
                                 log.info(f"{name} tous les épisodes sont déjà installés ou aucun nouveau épisode disponible")
                         else:
                             # Si ce n'est pas un format de plage, traiter normalement
-                            url = f"https://anime-sama.org/catalogue/{name}/saison{season}/{langage}/episodes.js"
+                            url = f"https://anime-sama.eu/catalogue/{name}/saison{season}/{langage}/episodes.js"
                             AS = anime_sama(anime_name=file_name, anime_url=url, anime_season=season, anime_langage=langage, plex_path=self.plex_path, download_path=self.download_path)
                             queue = AS.run()
                             if queue:
