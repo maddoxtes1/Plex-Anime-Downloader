@@ -84,6 +84,7 @@ def create_local_app(system) -> Flask:
         plex_root=plex_root,
         config_path=config_path,
         local_admin_password_hash=local_admin_password_hash,
+        system=system,
     )
     app.register_blueprint(local_bp)
 
