@@ -3,22 +3,30 @@ import pytz
 from datetime import datetime
 import json
 import re
+from configparser import ConfigParser
 
-from ..sys.logger import sys_logger
-from ..sys.logger import universal_logger
+from ..sys import FolderConfig, EnvConfig, universal_logger
 from .function import anime_sama #, franime
 
 class streaming_manager:
-    def __init__(self, queue, download_path, plex_path, anime_json, scan_option, timer):
+    def __init__(self, queue):
         self.queue = queue
-        self.download_path = download_path
-        self.plex_path = plex_path
-        self.anime_json = anime_json
-        self.scan_option = scan_option
-        self.seconds = timer
-        self.logger = sys_logger()
+        self.download_path = FolderConfig.find_path(folder_name="download")
+        self.plex_path = EnvConfig.get_env("plex_path")
+        self.anime_json = FolderConfig.find_path(file_name="anime.json")
+
+        config_path = FolderConfig.find_path(file_name="config.conf")
+        config = ConfigParser(allow_no_value=True)
+        config.read(config_path, encoding='utf-8')
+
+        self.anime_sama = config.get("scan-option", "anime-sama", fallback="True").lower() == "true"
+        self.franime = config.get("scan-option", "franime", fallback="False").lower() == "true"
+        
+        self.seconds = int(config.get("settings", "timer", fallback="3600"))
+        self.logger = universal_logger("System", "sys.log")
         self.run()
     
+
     def get_france_time(self):
         paris_tz = pytz.timezone('Europe/Paris')
         current_time = datetime.now(paris_tz)
@@ -40,17 +48,18 @@ class streaming_manager:
             mins, secs = divmod(remainder, 60)
             return f'{hours:02d}:{mins:02d}:{secs:02d}'
 
-        formatted_time = format_time(self.seconds)
+        formatted_time = format_time(seconds)
         timer_logger.info(f"Starting timer : {formatted_time}")
         
         counter = 0
-        while seconds:
+        remaining_seconds = seconds
+        while remaining_seconds > 0:
             time.sleep(1)
-            seconds -= 1 
+            remaining_seconds -= 1 
             counter += 1
             
             if counter >= 900:
-                formatted_time = format_time(seconds)
+                formatted_time = format_time(remaining_seconds)
                 timer_logger.info(f"Time remaining : {formatted_time}")
                 counter = 0
                 
@@ -92,7 +101,7 @@ class streaming_manager:
                         for anime in entry["single_download"]:
                             add_anime_to_list(anime)
                 
-                return anime_sama_list, franime_list
+                return anime_sama_list,franime_list
         except FileNotFoundError:
             self.logger.error(f"Fichier {self.anime_json} non trouvé.")
             return []
@@ -106,12 +115,11 @@ class streaming_manager:
     def run(self):
         while True:
             self.france_time = self.get_france_time()
-            Anime_Sama, FR_Anime = self.scan_option 
 
             anime_sama_list, franime_list = self.get_anime()
             franime_list = False # remove this line when franime is ready
 
-            if Anime_Sama == True:
+            if self.anime_sama == True:
                 self.logger.info(msg="Anime-Sama scan started")
                 log = universal_logger(name="Anime-Sama", log_file="anime-sama.log")
                 if anime_sama_list:

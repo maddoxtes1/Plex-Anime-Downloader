@@ -1,16 +1,23 @@
 import threading
 import queue
+from ..sys import universal_logger
+from ..sys import FolderConfig
+from configparser import ConfigParser
 
 from .worker import _worker
-from ..sys import queue_logger
 
 class queues:
-    def __init__(self, nombre_threads, download_path):
-        self.logger = queue_logger()
+    def __init__(self):
+        self.logger = universal_logger("Queue", "sys.log")
         self.download_queue = queue.Queue()
         self.threads = []
-        self.nombre_threads = nombre_threads
-        self.download_path = download_path
+
+        config_path = FolderConfig.find_path(file_name="config.conf")
+        config = ConfigParser(allow_no_value=True)
+        config.read(config_path, encoding='utf-8')
+        self.nombre_threads = int(config.get("settings", "threads"))
+
+        self.download_path = FolderConfig.find_path(folder_name="download")
         self._initialize_threads()
 
     def _initialize_threads(self):

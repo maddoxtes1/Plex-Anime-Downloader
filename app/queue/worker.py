@@ -4,10 +4,10 @@ import queue
 
 from mp4mdl import mp4mdl
 from ..sys.database import database
-from ..sys.logger import queue_logger, universal_logger
+from ..sys import universal_logger
 
 def _worker(download_queue, download_path):
-    logger = queue_logger()
+    logger = universal_logger("Worker", "sys.log")
     while True:
         try:
             episode_name, path, episode_urls = download_queue.get(timeout=1)

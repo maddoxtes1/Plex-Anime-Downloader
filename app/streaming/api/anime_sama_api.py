@@ -3,7 +3,7 @@ import re
 from urllib.parse import urlparse
 from collections import Counter
 
-from ...sys.logger import universal_logger
+from ...sys import universal_logger
 from ...sys.database import database
 
 

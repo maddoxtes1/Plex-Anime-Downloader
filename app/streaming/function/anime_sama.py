@@ -1,9 +1,9 @@
 import os
 
-from ...sys.logger import universal_logger
-from ...sys.function import get_path
+from ...sys import universal_logger, FolderConfig
 from ..api import find_episode, extract_link, extract_all_part_episode
 from ...sys.database import database
+import json
 
 class anime_sama:
     def __init__(self, anime_name, anime_url, anime_season, anime_langage, plex_path, download_path):
@@ -14,9 +14,28 @@ class anime_sama:
         self.anime_langage = anime_langage
         self.plex_path = plex_path
         self.download_path = download_path
-    
+
+
     def get_path(self):
-        folder_name = get_path(langage=self.anime_langage)
+        plex_path_json = FolderConfig.find_path(file_name="plex_path.json")
+        with open(plex_path_json, 'r', encoding='utf-8') as json_file:
+            data = json.load(json_file)
+
+        path_entries = [item for item in data if isinstance(item, dict) and 'path' in item and 'language' in item]
+
+        found_paths = []
+        for entry in path_entries:
+            if self.anime_langage in entry['language']:
+                found_paths.append(entry['path'])
+
+        if len(found_paths) > 1:
+            self.logger.warning(f"Plusieurs dossiers trouvés avec le langage '{self.anime_langage}'. Utilisation du premier dossier: {found_paths[0]}")
+            folder_name = found_paths[0]
+        elif len(found_paths) == 1:
+            folder_name = found_paths[0]
+        else:
+            folder_name = None
+
         if folder_name is None:
             self.logger.warning(f"Aucun dossier trouvé avec le langage '{self.anime_langage}'")
             return None
