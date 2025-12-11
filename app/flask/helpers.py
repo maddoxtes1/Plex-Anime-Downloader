@@ -5,7 +5,8 @@ import sqlite3
 import os
 import json
 import configparser
-from app.sys.logger import flask_logger
+from pathlib import Path
+from app.sys import universal_logger
 
 
 class FlaskHelpers:
@@ -19,73 +20,108 @@ class FlaskHelpers:
         self.config_path = config_path
         self.plex_root = plex_root
         self.db_path = os.path.join(data_path, "database", "users.db")
-        self.log = flask_logger()
+        self.log = universal_logger("FlaskHelpers", "flask.log")
     
     def get_db_connection(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
-    def init_db(self):
-        """Crée uniquement la DB users, pas les fichiers de config"""
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        if not os.path.exists(self.db_path):
-            conn = self.get_db_connection()
-            with conn:
-                conn.execute(
-                    """
-                    CREATE TABLE users (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        username TEXT UNIQUE NOT NULL,
-                        password TEXT NOT NULL
-                    );
-                    """
-                )
-            conn.close()
-            self.log.info("Base users.db créée")
-
     def load_config_conf(self):
         """
-        Lit config.conf et renvoie un dict avec threads, timer, anime_sama, franime.
+        Lit config.conf et renvoie un dict avec threads, timer, anime_sama, franime, news, log_level.
         Ne crée pas le fichier : il doit déjà exister (créé par ton app Docker).
         """
-        cfg = configparser.ConfigParser(allow_no_value=True)
-        config_file = os.path.join(self.config_path, "config.conf")
+        from app.sys import FolderConfig
+        from pathlib import Path
+        
+        # Utiliser FolderConfig pour trouver le chemin du fichier
+        config_file = FolderConfig.find_path(file_name="config.conf")
+        if not config_file:
+            # Fallback sur l'ancien système si FolderConfig ne trouve pas le fichier
+            config_file = Path(os.path.join(self.config_path, "config.conf"))
+        else:
+            config_file = Path(config_file)
 
-        if not os.path.exists(config_file):
+        if not config_file.exists():
             # valeurs par défaut si le fichier n'existe pas
             return {
                 "threads": 4,
                 "timer": 3600,
                 "anime_sama": True,
                 "franime": False,
+                "news": True,
+                "log_level": "INFO",
             }
 
+        cfg = configparser.ConfigParser(allow_no_value=True)
         cfg.read(config_file, encoding="utf-8")
         threads = int(cfg.get("settings", "threads", fallback="4"))
         timer = int(cfg.get("settings", "timer", fallback="3600"))
         anime_sama = cfg.get("scan-option", "anime-sama", fallback="True").lower() == "true"
         franime = cfg.get("scan-option", "franime", fallback="False").lower() == "true"
+        news = cfg.get("settings", "news", fallback="True").lower() == "true"
+        log_level = cfg.get("settings", "log_level", fallback="INFO")
         return {
             "threads": threads,
             "timer": timer,
             "anime_sama": anime_sama,
             "franime": franime,
+            "news": news,
+            "log_level": log_level,
         }
 
-    def save_config_conf(self, threads: int, timer: int, anime_sama: bool, franime: bool):
+    def save_config_conf(self, threads: int, timer: int, anime_sama: bool, franime: bool, news: bool = None, log_level: str = None):
         """
-        Réécrit config.conf avec les nouvelles valeurs.
+        Met à jour config.conf avec les nouvelles valeurs en préservant les autres paramètres.
         """
-        os.makedirs(self.config_path, exist_ok=True)
-        config_file = os.path.join(self.config_path, "config.conf")
+        from app.sys import FolderConfig
+        
+        # Utiliser FolderConfig pour trouver le chemin du fichier
+        config_file = FolderConfig.find_path(file_name="config.conf")
+        if not config_file:
+            # Fallback sur l'ancien système si FolderConfig ne trouve pas le fichier
+            os.makedirs(self.config_path, exist_ok=True)
+            config_file = Path(os.path.join(self.config_path, "config.conf"))
+        else:
+            config_file = Path(config_file)
+        
+        # Lire le fichier existant pour préserver tous les paramètres
         cfg = configparser.ConfigParser(allow_no_value=True)
-        cfg.add_section("settings")
+        if config_file.exists():
+            cfg.read(config_file, encoding="utf-8")
+        
+        # Créer les sections si elles n'existent pas
+        if not cfg.has_section("settings"):
+            cfg.add_section("settings")
+        if not cfg.has_section("scan-option"):
+            cfg.add_section("scan-option")
+        
+        # Mettre à jour les paramètres modifiés
         cfg.set("settings", "threads", str(threads))
         cfg.set("settings", "timer", str(timer))
-        cfg.add_section("scan-option")
         cfg.set("scan-option", "anime-sama", "True" if anime_sama else "False")
         cfg.set("scan-option", "franime", "True" if franime else "False")
+        
+        # Mettre à jour news si fourni
+        if news is not None:
+            cfg.set("settings", "news", "True" if news else "False")
+        # Sinon, préserver la valeur existante ou utiliser la valeur par défaut
+        elif not cfg.has_option("settings", "news"):
+            cfg.set("settings", "news", "True")
+        
+        # Mettre à jour log_level si fourni
+        if log_level is not None:
+            cfg.set("settings", "log_level", log_level)
+        # Sinon, préserver la valeur existante ou utiliser la valeur par défaut
+        elif not cfg.has_option("settings", "log_level"):
+            cfg.set("settings", "log_level", "INFO")
+        
+        # Préserver le thème s'il existe
+        if not cfg.has_option("settings", "theme"):
+            cfg.set("settings", "theme", "neon-cyberpunk")
+        
+        # Écrire le fichier
         with open(config_file, "w", encoding="utf-8") as f:
             cfg.write(f)
 

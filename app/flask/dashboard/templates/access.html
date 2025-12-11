@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Accès local - Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        {{ theme_css|safe }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Accès admin local</h1>
+        <p>Interface accessible uniquement sur le réseau local, protégée par un mot de passe unique.</p>
+
+        <div class="messages">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="msg {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        </div>
+
+        <form method="post">
+            <label for="password">Mot de passe admin</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
+            <button type="submit">Se connecter</button>
+        </form>
+        <div class="hint">
+            Le mot de passe est défini dans la variable d'environnement
+            <code>LOCAL_ADMIN_PASSWORD</code> (ou valeur par défaut si non définie).
+        </div>
+    </div>
+</body>
+</html>
+
