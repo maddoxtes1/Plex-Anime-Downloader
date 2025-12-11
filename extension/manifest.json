@@ -17,8 +17,12 @@
       "128": "icon.png"
     }
   },
+  "background": {
+    "service_worker": "background.js"
+  },
   "permissions": [
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "http://*/*",

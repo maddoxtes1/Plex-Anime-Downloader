@@ -371,6 +371,13 @@ btnLogin.addEventListener("click", async () => {
 
     // Charger le dashboard
     await loadDashboard();
+    
+    // Synchroniser immédiatement après la connexion
+    try {
+      chrome.runtime.sendMessage({ type: 'forceSync' }).catch(() => {});
+    } catch (e) {
+      // Ignorer les erreurs
+    }
   } catch (e) {
     console.error(e);
     setMessage(loginMessage, "Erreur réseau pendant la connexion.", "error");
@@ -396,6 +403,15 @@ btnLogout.addEventListener("click", async () => {
   showView("login");
 });
 
+// Écouter les messages du content script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'syncQueue') {
+    // Notifier le background script pour qu'il traite la queue
+    chrome.runtime.sendMessage({ type: 'syncQueue' }).catch(() => {});
+    sendResponse({ ok: true });
+  }
+});
+
 (async function init() {
   await loadState();
   if (currentUser && currentServer) {
@@ -406,6 +422,17 @@ btnLogout.addEventListener("click", async () => {
     showView("login");
   } else {
     showView("server");
+  }
+  
+  // Notifier le background script pour démarrer la synchronisation automatique
+  // Le background script gère maintenant toute la synchronisation automatique
+  if (currentUser && currentServer) {
+    chrome.runtime.sendMessage({ type: 'startSync' }).catch(() => {
+      // Ignorer si le background script n'est pas encore prêt
+    });
+    
+    // Forcer une synchronisation immédiate au chargement du popup
+    chrome.runtime.sendMessage({ type: 'forceSync' }).catch(() => {});
   }
 })();
 
