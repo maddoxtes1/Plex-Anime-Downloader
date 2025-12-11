@@ -1,3 +1,3 @@
-"""
-Package principal de l'application
-""" 
+# Package app
+
+

@@ -1,6 +1,6 @@
 """
-Module Flask - Applications API et locale séparées
+Module Flask - Applications API et Dashboard séparées
 """
-from app.flask.manager import create_api_app, create_local_app, FlaskServer
+from app.flask.manager import FlaskManager, flask_manager
 
-__all__ = ["create_api_app", "create_local_app", "FlaskServer"]
+__all__ = ["FlaskManager", "flask_manager"]
