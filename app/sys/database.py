@@ -1,6 +1,6 @@
 import json
 
-from .logger import sys_logger
+from .system import universal_logger
 
 
 class database:
@@ -12,7 +12,7 @@ class database:
         if _path is None:
             raise ValueError("Le chemin du fichier de log n'est pas défini")
         self.database_path = _path
-        self.logger = sys_logger()
+        self.logger = universal_logger("Database", "sys.log")
     
     def _read_database(self):
         try:
