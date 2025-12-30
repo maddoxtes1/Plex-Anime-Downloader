@@ -28,7 +28,7 @@ Créez un fichier `docker-compose.yml` avec le contenu suivant :
 ```yaml
 services:
   anime-sama_downloader:
-    image: maddoxtes/plex-anime-downloader:beta-0.6.1
+    image: maddoxtes/plex-anime-downloader:beta-0.6.5
     volumes:
       - /chemin/vers/vos/donnees:/mnt/user/appdata/anime-downloader
       - /chemin/vers/votre/bibliotheque/plex:/mnt/user/appdata/plex
