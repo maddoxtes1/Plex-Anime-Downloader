@@ -1,7 +1,7 @@
 _ENV_CONFIG = {
     "plex_anime_downloader_V": {
         "env_var": "PLEX_ANIME_DOWNLOADER_V",
-        "default": "Beta-0.6.4",
+        "default": "Beta-0.6.5",
         "type": str,
         "use_default": True
     },
@@ -109,7 +109,7 @@ _File_Config = {
     ".env": {
         "type": "env",
         "default": {
-            "Version": "Beta-0.6.4",
+            "Version": "Beta-0.6.5",
             "Server_ID": "none",
         }
     },
@@ -125,6 +125,7 @@ _File_Config = {
             },
             "scan-option": {
                 "anime-sama": True,
+                "as_Baseurl": "https://anime-sama.tv",
                 "franime": False
             }
             }
@@ -310,38 +311,10 @@ def auto_env(env_file=None):
     À la fin, vérifie si la version a changé et lance un script de migration si nécessaire.
     """
     import uuid
-    import os
-    import configparser
     from pathlib import Path
     
     try:
         env_path = Path(env_file) if env_file else None
-        
-        # ===== SYSTÈME TEMPORAIRE : Vérifier config.conf AVANT de lire .env =====
-        # Si le .env n'existe pas encore ou si Version n'est pas définie,
-        # vérifier si une version existe dans config.conf [app]
-        config_version = None
-        try:
-            from .system import FolderConfig
-            config_path = FolderConfig.find_path(file_name="config.conf")
-            if config_path and config_path.exists():
-                config = configparser.ConfigParser(allow_no_value=True)
-                config.read(config_path, encoding='utf-8')
-                if config.has_section("app") and config.has_option("app", "version"):
-                    config_version = config.get("app", "version")
-                    # Si on trouve une version dans config.conf, lancer la migration vers Beta-0.6.4
-                    if config_version:
-                        try:
-                            from .system import EnvConfig
-                            from .migration import run_migration
-                            current_version = EnvConfig.get_env("plex_anime_downloader_V")
-                            # Lancer la migration depuis la version trouvée dans config.conf
-                            run_migration(env_file=env_file, old_version=config_version, new_version=current_version)
-                        except Exception:
-                            pass
-        except Exception:
-            pass
-        # ===== FIN SYSTÈME TEMPORAIRE =====
         
         if not env_path:
             return
@@ -377,11 +350,6 @@ def auto_env(env_file=None):
         
         # Récupérer la version dans le fichier .env
         env_version = env_vars.get('Version', '')
-        
-        # Si Version n'existe pas dans .env mais qu'on a trouvé une version dans config.conf,
-        # utiliser celle de config.conf comme ancienne version
-        if config_version:
-            env_version = config_version
         
         # Vérifier si les versions sont différentes
         version_changed = False

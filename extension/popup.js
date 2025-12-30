@@ -216,6 +216,11 @@ async function loadDashboard() {
   // Charger les infos de l'application
   appInfo = await loadAppInfo();
   
+  // Sauvegarder anime_sama_url dans le storage pour que background.js puisse l'utiliser
+  if (appInfo && appInfo.anime_sama_url) {
+    chrome.storage.sync.set({ anime_sama_url: appInfo.anime_sama_url });
+  }
+  
   // Mettre à jour le nom de l'application
   const appNameEl = document.getElementById("app-name");
   if (appNameEl && appInfo) {

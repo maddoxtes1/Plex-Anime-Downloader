@@ -82,30 +82,22 @@ _MIGRATIONS = {
             }
         ]
     },
-    # Exemple pour une future version
-    # "Beta-0.6.5": {
-    #     "description": "Migration vers Beta-0.6.5",
-    #     "changes": [
-    #         {
-    #             "type": "rename_key",
-    #             "description": "Renommer threads en thread",
-    #             "file": "config.conf",
-    #             "section": "settings",
-    #             "old_key": "threads",
-    #             "new_key": "thread"
-    #         }
-    #     ]
-    # }
-    # Exemple de migration sans changement
-    # "Beta-0.6.6": {
-    #     "description": "Migration vers Beta-0.6.6 - Aucun changement de fichiers",
-    #     "changes": [
-    #         {
-    #             "type": "no_change",
-    #             "description": "Aucun changement de fichiers pour cette version"
-    #         }
-    #     ]
-    # }
+    "Beta-0.6.5": {
+        "description": "Migration vers Beta-0.6.5 - Ajout du paramètre as_Baseurl dans config.conf",
+        "changes": [
+            {
+                "type": "add_key",
+                "description": "Ajouter as_Baseurl dans la section scan-option de config.conf",
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "scan-option",
+                    "key": "as_Baseurl"
+                },
+                "default_value": "https://anime-sama.tv"
+            }
+        ]
+    }
 }
 
 

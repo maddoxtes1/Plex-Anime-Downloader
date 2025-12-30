@@ -572,6 +572,16 @@
                                 Activer scan anime-sama
                             </label>
                         </div>
+                        <div class="mb-2">
+                            <label class="small" for="as_Baseurl">URL de base anime-sama</label>
+                            <input class="medium" type="text" id="as_Baseurl" name="as_Baseurl" 
+                                   placeholder="https://anime-sama.tv" 
+                                   value="{{ config.get('as_Baseurl', 'https://anime-sama.tv') }}"
+                                   style="width: 100%; max-width: 400px;">
+                            <p class="sub" style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">
+                                URL de base du site anime-sama (ex: https://anime-sama.tv ou https://anime-sama.eu)
+                            </p>
+                        </div>
                         <div class="mb-3">
                             <label class="small">
                                 <input type="checkbox" name="franime" {% if config.franime %}checked{% endif %}>

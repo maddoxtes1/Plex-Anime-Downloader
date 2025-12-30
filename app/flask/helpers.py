@@ -52,6 +52,7 @@ class FlaskHelpers:
                 "franime": False,
                 "news": True,
                 "log_level": "INFO",
+                "as_Baseurl": "https://anime-sama.tv",
             }
 
         cfg = configparser.ConfigParser(allow_no_value=True)
@@ -62,6 +63,7 @@ class FlaskHelpers:
         franime = cfg.get("scan-option", "franime", fallback="False").lower() == "true"
         news = cfg.get("settings", "news", fallback="True").lower() == "true"
         log_level = cfg.get("settings", "log_level", fallback="INFO")
+        as_Baseurl = cfg.get("scan-option", "as_Baseurl", fallback="https://anime-sama.tv")
         return {
             "threads": threads,
             "timer": timer,
@@ -69,9 +71,10 @@ class FlaskHelpers:
             "franime": franime,
             "news": news,
             "log_level": log_level,
+            "as_Baseurl": as_Baseurl,
         }
 
-    def save_config_conf(self, threads: int, timer: int, anime_sama: bool, franime: bool, news: bool = None, log_level: str = None):
+    def save_config_conf(self, threads: int, timer: int, anime_sama: bool, franime: bool, news: bool = None, log_level: str = None, as_Baseurl: str = None):
         """
         Met à jour config.conf avec les nouvelles valeurs en préservant les autres paramètres.
         """
@@ -116,6 +119,13 @@ class FlaskHelpers:
         # Sinon, préserver la valeur existante ou utiliser la valeur par défaut
         elif not cfg.has_option("settings", "log_level"):
             cfg.set("settings", "log_level", "INFO")
+        
+        # Mettre à jour as_Baseurl si fourni
+        if as_Baseurl is not None:
+            cfg.set("scan-option", "as_Baseurl", as_Baseurl)
+        # Sinon, préserver la valeur existante ou utiliser la valeur par défaut
+        elif not cfg.has_option("scan-option", "as_Baseurl"):
+            cfg.set("scan-option", "as_Baseurl", "https://anime-sama.tv")
         
         # Préserver le thème s'il existe
         if not cfg.has_option("settings", "theme"):

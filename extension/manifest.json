@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Flask Auth Client",
-  "version": "1.0.0",
+  "name": "anime-downloader-extension",
+  "version": "Beta-0.6.5",
   "description": "Extension Chrome/Opera pour se connecter à un serveur Flask et afficher un dashboard.",
   "icons": {
     "16": "icon.png",
@@ -22,21 +22,12 @@
   },
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "http://*/*",
     "https://*/*"
-  ],
-  "content_scripts": [
-    {
-      "matches": [
-        "https://anime-sama.eu/planning/*",
-        "https://anime-sama.eu/catalogue/*/saison*/*"
-      ],
-      "js": ["content.js"],
-      "css": ["content.css"]
-    }
   ]
 }
 

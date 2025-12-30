@@ -240,11 +240,26 @@ def create_api_blueprint(helpers, queue_manager=None):
     @api_bp.route("/app-info", methods=["GET"])
     def api_get_app_info():
         """Retourne les informations de l'application pour l'extension."""
+        from app.sys import FolderConfig
+        import configparser
+        
+        # Récupérer as_Baseurl depuis config.conf
+        anime_sama_url = "https://anime-sama.tv"  # Valeur par défaut
+        try:
+            config_path = FolderConfig.find_path(file_name="config.conf")
+            if config_path and config_path.exists():
+                config = configparser.ConfigParser(allow_no_value=True)
+                config.read(config_path, encoding='utf-8')
+                if config.has_section("scan-option") and config.has_option("scan-option", "as_Baseurl"):
+                    anime_sama_url = config.get("scan-option", "as_Baseurl")
+        except Exception:
+            pass
+        
         return jsonify({
             "ok": True,
             "app_name": "Plex Anime Downloader",
             "local_dashboard_port": 5001,
-            "anime_sama_url": "https://anime-sama.eu"
+            "anime_sama_url": anime_sama_url
         }), 200
 
     @api_bp.route("/anime-list", methods=["GET"])

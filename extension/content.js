@@ -553,6 +553,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true; // Indique qu'on répondra de manière asynchrone
   }
+  
+  if (message.type === 'ping') {
+    // Répondre au ping pour indiquer que le script est déjà injecté
+    sendResponse({ ok: true, injected: true });
+    return true;
+  }
 });
 
 // Initialiser quand le DOM est prêt

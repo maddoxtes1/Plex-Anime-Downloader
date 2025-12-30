@@ -352,8 +352,15 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         franime = request.form.get("franime") == "on"
         news = request.form.get("news") == "on"
         log_level = request.form.get("log_level", "INFO").strip()
+        as_Baseurl = (request.form.get("as_Baseurl") or "").strip()
 
-        helpers.save_config_conf(threads, timer, anime_sama, franime, news=news, log_level=log_level)
+        # Valider l'URL si fournie
+        if as_Baseurl:
+            if not as_Baseurl.startswith(("http://", "https://")):
+                flash("L'URL de base doit commencer par http:// ou https://", "error")
+                return redirect(url_for("local.local_dashboard") + "#settings")
+
+        helpers.save_config_conf(threads, timer, anime_sama, franime, news=news, log_level=log_level, as_Baseurl=as_Baseurl if as_Baseurl else None)
         flash("Configuration sauvegardée.", "success")
         return redirect(url_for("local.local_dashboard") + "#settings")
 
