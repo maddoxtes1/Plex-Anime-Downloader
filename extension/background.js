@@ -1,5 +1,5 @@
 // Service Worker (Background Script) pour synchronisation automatique
-// Synchronise la liste des animes toutes les 2 minutes
+// Synchronise la liste des animes toutes les minutes
 
 let syncInterval = null;
 let syncDebounceTimer = null;
@@ -7,11 +7,9 @@ const SYNC_DEBOUNCE_MS = 1000; // Attendre 1 seconde avant de synchroniser
 
 // Fonction pour obtenir la configuration
 async function getConfig() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(["serverUrl", "lastUser", "isLoggedIn", "anime_sama_url"], (data) => {
-      resolve(data);
-    });
-  });
+  return new Promise(resolve => 
+    chrome.storage.sync.get(["serverUrl", "lastUser", "isLoggedIn", "anime_sama_url"], resolve)
+  );
 }
 
 // Fonction pour obtenir l'URL de base anime-sama (priorise le serveur, puis storage)
@@ -48,33 +46,19 @@ async function getAnimeSamaBaseUrl() {
   }
   
   // PRIORITÉ 3 : Valeur par défaut
-  return "https://anime-sama.eu";
+  return "https://anime-sama.tv";
 }
 
 // Fonction pour vérifier si une URL correspond au domaine configuré depuis l'API Flask
 async function shouldInjectScript(tabUrl) {
   if (!tabUrl) return false;
-  
   try {
     const tabUrlObj = new URL(tabUrl);
-    
-    // Récupérer l'URL de base configurée depuis l'API Flask (priorité serveur)
     const baseUrl = await getAnimeSamaBaseUrl();
-    const baseUrlObj = new URL(baseUrl);
-    
-    // Vérifier STRICTEMENT que le domaine correspond à celui configuré dans l'API
-    if (tabUrlObj.origin !== baseUrlObj.origin) {
-      // Le domaine ne correspond pas, ne pas injecter
-      return false;
-    }
-    
-    // Vérifier si c'est une page planning ou catalogue
+    if (tabUrlObj.origin !== new URL(baseUrl).origin) return false;
     const path = tabUrlObj.pathname;
-    return path.includes('/planning/') || 
-           (path.includes('/catalogue/') && path.includes('/saison') && path.match(/\/saison\d+/));
+    return path.includes('/planning/') || (path.includes('/catalogue/') && /\/saison\d+/.test(path));
   } catch (e) {
-    // URL invalide ou erreur lors de la récupération de l'URL configurée
-    console.error("Erreur lors de la vérification de l'URL:", e);
     return false;
   }
 }
@@ -83,44 +67,20 @@ async function shouldInjectScript(tabUrl) {
 async function injectContentScripts(tabId) {
   try {
     const tab = await chrome.tabs.get(tabId);
-    if (!tab.url) return;
+    if (!tab.url || !(await shouldInjectScript(tab.url))) return;
     
-    const shouldInject = await shouldInjectScript(tab.url);
-    if (!shouldInject) return;
-    
-    // Vérifier si les scripts sont déjà injectés
+    // Vérifier si déjà injecté
     try {
-      // Tenter d'envoyer un message pour vérifier si le script est déjà là
       await chrome.tabs.sendMessage(tabId, { type: 'ping' });
-      // Si on arrive ici, le script est déjà injecté
-      return;
-    } catch (e) {
-      // Le script n'est pas encore injecté, continuer
-    }
+      return; // Déjà injecté
+    } catch (e) {}
     
-    // Injecter le CSS
-    try {
-      await chrome.scripting.insertCSS({
-        target: { tabId: tabId },
-        files: ['content.css']
-      });
-    } catch (e) {
-      console.error("Erreur lors de l'injection du CSS:", e);
-    }
-    
-    // Injecter le JavaScript
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ['content.js']
-      });
-      console.log(`✅ Content scripts injectés dans l'onglet ${tabId}`);
-    } catch (e) {
-      console.error("Erreur lors de l'injection du script:", e);
-    }
-  } catch (e) {
-    console.error("Erreur lors de l'injection des content scripts:", e);
-  }
+    // Injecter CSS et JS
+    await Promise.all([
+      chrome.scripting.insertCSS({ target: { tabId }, files: ['content.css'] }).catch(() => {}),
+      chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] }).catch(() => {})
+    ]);
+  } catch (e) {}
 }
 
 // Fonction pour synchroniser la liste des animes avec le serveur
@@ -177,26 +137,17 @@ async function syncAnimeList() {
     const data = await response.json();
     
     if (data.ok && data.anime_list) {
-      // Fonction pour normaliser les URLs (enlever slash final, etc.)
-      function normalizeAnimeUrl(url) {
+      // Fonction pour normaliser les URLs
+      const normalizeAnimeUrl = (url) => {
         if (!url) return null;
-        let normalized = url.trim();
-        // Enlever le slash final pour normaliser
-        if (normalized.endsWith('/')) {
-          normalized = normalized.slice(0, -1);
-        }
-        // S'assurer qu'il commence par /
-        if (!normalized.startsWith('/')) {
-          normalized = '/' + normalized;
-        }
-        return normalized;
-      }
+        let normalized = url.trim().replace(/\/$/, '');
+        return normalized.startsWith('/') ? normalized : '/' + normalized;
+      };
       
       // Récupérer le cache actuel pour comparer
       const currentCache = await new Promise((resolve) => {
         chrome.storage.local.get(["animeList", "cacheTimestamp"], (data) => {
-          // Normaliser les URLs du cache actuel
-          const normalizedUrls = (data.animeList || []).map(url => normalizeAnimeUrl(url)).filter(url => url !== null);
+          const normalizedUrls = (data.animeList || []).map(normalizeAnimeUrl).filter(Boolean);
           resolve({
             animeList: new Set(normalizedUrls),
             timestamp: data.cacheTimestamp || 0
@@ -205,8 +156,7 @@ async function syncAnimeList() {
       });
       
       // Créer le nouveau cache avec URLs normalisées
-      const newAnimeSet = new Set(data.anime_list.map(anime => normalizeAnimeUrl(anime.url)).filter(url => url !== null));
-      const newAnimeArray = Array.from(newAnimeSet);
+      const newAnimeArray = [...new Set(data.anime_list.map(anime => normalizeAnimeUrl(anime.url)).filter(Boolean))];
       
       // Vérifier s'il y a des changements (comparaison avec URLs normalisées)
       const hasChanges = 
@@ -228,13 +178,13 @@ async function syncAnimeList() {
             if (tab.url && tab.id) {
               const shouldNotify = await shouldInjectScript(tab.url);
               if (shouldNotify) {
-                chrome.tabs.sendMessage(tab.id, {
-                  type: 'cacheUpdated',
-                  animeList: newAnimeArray
-                }).catch(() => {
-                  // Ignorer les erreurs (tab peut ne pas avoir de content script)
-                });
-              }
+              chrome.tabs.sendMessage(tab.id, {
+                type: 'cacheUpdated',
+                animeList: newAnimeArray
+              }).catch(() => {
+                // Ignorer les erreurs (tab peut ne pas avoir de content script)
+              });
+            }
             }
           }
         });
@@ -248,6 +198,77 @@ async function syncAnimeList() {
     console.error("❌ Erreur lors de la synchronisation:", error);
     console.error("Stack:", error.stack);
   }
+}
+
+// Fonction pour normaliser une URL
+function normalizeUrl(url) {
+  if (!url) return null;
+  try {
+    const path = url.startsWith("http") ? new URL(url).pathname : url;
+    const normalized = path.trim().replace(/\/$/, '');
+    return normalized.startsWith('/') ? normalized : '/' + normalized;
+  } catch (e) {
+    return url;
+  }
+}
+
+// Fonction pour retirer un anime du cache si l'ajout a échoué
+async function removeFromCacheIfExists(animeUrl, errorMessage) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(["animeList"], async (storageData) => {
+      const animeList = storageData.animeList || [];
+      const targetNormalized = normalizeUrl(animeUrl);
+      if (!targetNormalized) {
+        resolve();
+        return;
+      }
+      
+      const filtered = animeList.filter(url => {
+        const normalized = normalizeUrl(url);
+        return normalized !== targetNormalized;
+      });
+      
+      if (filtered.length !== animeList.length) {
+        await chrome.storage.local.set({ animeList: filtered });
+        // Notifier les content scripts
+        chrome.tabs.query({}, async (tabs) => {
+          for (const tab of tabs) {
+            if (tab.url && tab.id) {
+              const shouldNotify = await shouldInjectScript(tab.url);
+              if (shouldNotify) {
+                chrome.tabs.sendMessage(tab.id, { 
+                  type: 'cacheUpdated',
+                  error: errorMessage || "Erreur lors de l'ajout"
+                }).catch(() => {});
+              }
+            }
+          }
+        });
+      }
+      resolve();
+    });
+  });
+}
+
+// Fonction pour s'assurer qu'un anime est dans le cache
+async function ensureInCache(animeUrl) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(["animeList"], async (storageData) => {
+      const animeList = storageData.animeList || [];
+      const targetNormalized = normalizeUrl(animeUrl);
+      if (!targetNormalized) {
+        resolve();
+        return;
+      }
+      
+      const normalizedList = animeList.map(normalizeUrl).filter(Boolean);
+      if (!normalizedList.includes(targetNormalized)) {
+        animeList.push(targetNormalized);
+        await chrome.storage.local.set({ animeList });
+      }
+      resolve();
+    });
+  });
 }
 
 // Fonction pour traiter la queue d'actions
@@ -284,8 +305,52 @@ async function processActionQueue() {
           }),
         });
         const data = await response.json();
+        
+        // Gérer les différents cas de réponse
         if (!data.ok) {
+          // Erreur serveur
           console.error("Erreur lors de l'ajout:", data.error);
+          await removeFromCacheIfExists(action.animeUrl, data.error);
+        } else if (data.already_exists === true) {
+          // L'anime existe déjà - c'est OK, on garde dans le cache mais on notifie
+          console.log("Anime déjà présent:", data.message);
+          // S'assurer que l'anime est bien dans le cache
+          await ensureInCache(action.animeUrl);
+          // Notifier les content scripts pour mettre à jour l'UI
+          chrome.tabs.query({}, async (tabs) => {
+            for (const tab of tabs) {
+              if (tab.url && tab.id) {
+                const shouldNotify = await shouldInjectScript(tab.url);
+                if (shouldNotify) {
+                  chrome.tabs.sendMessage(tab.id, { 
+                    type: 'cacheUpdated',
+                    message: data.message,
+                    animeUrl: action.animeUrl
+                  }).catch(() => {});
+                }
+              }
+            }
+          });
+        } else if (data.already_exists === false) {
+          // Anime ajouté avec succès
+          console.log("Anime ajouté:", data.message);
+          // S'assurer que l'anime est dans le cache
+          await ensureInCache(action.animeUrl);
+          // Notifier les content scripts
+          chrome.tabs.query({}, async (tabs) => {
+            for (const tab of tabs) {
+              if (tab.url && tab.id) {
+                const shouldNotify = await shouldInjectScript(tab.url);
+                if (shouldNotify) {
+                  chrome.tabs.sendMessage(tab.id, { 
+                    type: 'cacheUpdated',
+                    message: data.message,
+                    animeUrl: action.animeUrl
+                  }).catch(() => {});
+                }
+              }
+            }
+          });
         }
       } else if (action.action === 'remove') {
         const response = await fetch(config.serverUrl + "/api/remove-download", {
@@ -300,6 +365,38 @@ async function processActionQueue() {
         const data = await response.json();
         if (!data.ok) {
           console.error("Erreur lors de la suppression:", data.error);
+          // Notifier les content scripts de l'erreur
+          chrome.tabs.query({}, async (tabs) => {
+            for (const tab of tabs) {
+              if (tab.url && tab.id) {
+                const shouldNotify = await shouldInjectScript(tab.url);
+                if (shouldNotify) {
+                  chrome.tabs.sendMessage(tab.id, { 
+                    type: 'cacheUpdated',
+                    error: data.error || "Erreur lors de la suppression",
+                    animeUrl: action.animeUrl
+                  }).catch(() => {});
+                }
+              }
+            }
+          });
+        } else {
+          // Suppression réussie, notifier les content scripts
+          console.log("Anime supprimé:", data.message);
+          chrome.tabs.query({}, async (tabs) => {
+            for (const tab of tabs) {
+              if (tab.url && tab.id) {
+                const shouldNotify = await shouldInjectScript(tab.url);
+                if (shouldNotify) {
+                  chrome.tabs.sendMessage(tab.id, { 
+                    type: 'cacheUpdated',
+                    message: data.message || "Anime supprimé avec succès",
+                    animeUrl: action.animeUrl
+                  }).catch(() => {});
+                }
+              }
+            }
+          });
         }
       }
     } catch (error) {
@@ -337,22 +434,13 @@ function debouncedSync() {
 
 // Fonction pour démarrer la synchronisation périodique
 function startPeriodicSync() {
-  // Arrêter l'intervalle existant si présent
-  if (syncInterval) {
-    clearInterval(syncInterval);
-  }
-  
-  // Synchroniser immédiatement (avec debounce pour éviter les doublons)
+  if (syncInterval) clearInterval(syncInterval);
   debouncedSync();
-  
-  // Puis toutes les 2 minutes (120000 ms)
   syncInterval = setInterval(async () => {
-    // Traiter la queue d'abord, puis synchroniser la liste
     await processActionQueue();
     await syncAnimeList();
-  }, 120000); // 2 minutes
-  
-  console.log("🔄 Synchronisation automatique démarrée (toutes les 2 minutes)");
+  }, 60000); // 1 minute
+  console.log("🔄 Synchronisation automatique démarrée (toutes les minutes)");
 }
 
 // Fonction pour arrêter la synchronisation périodique
@@ -370,20 +458,12 @@ function stopPeriodicSync() {
 
 // Écouter les changements de configuration
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'sync') {
-    if (changes.isLoggedIn || changes.serverUrl) {
-      // La configuration a changé, redémarrer la synchronisation
-      const newIsLoggedIn = changes.isLoggedIn?.newValue ?? 
-        (async () => {
-          const config = await getConfig();
-          return config.isLoggedIn;
-        })();
-      
-      if (newIsLoggedIn) {
-        startPeriodicSync();
-      } else {
-        stopPeriodicSync();
-      }
+  if (areaName === 'sync' && (changes.isLoggedIn || changes.serverUrl)) {
+    const newIsLoggedIn = changes.isLoggedIn?.newValue;
+    if (newIsLoggedIn !== undefined) {
+      newIsLoggedIn ? startPeriodicSync() : stopPeriodicSync();
+    } else if (changes.serverUrl) {
+      getConfig().then(config => config.isLoggedIn && startPeriodicSync());
     }
   }
 });
