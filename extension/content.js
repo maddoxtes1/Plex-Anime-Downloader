@@ -1,12 +1,10 @@
-// Content script pour ajouter des boutons "Add to download" sur anime-sama.eu/planning/
+// Content script pour ajouter des boutons "Add to download" sur les pages anime-sama
 
 // Fonction pour obtenir les informations de l'extension
 async function getExtensionConfig() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(["serverUrl", "lastUser", "isLoggedIn"], (data) => {
-      resolve(data);
-    });
-  });
+  return new Promise(resolve => 
+    chrome.storage.sync.get(["serverUrl", "lastUser", "isLoggedIn"], resolve)
+  );
 }
 
 // ============================================
@@ -15,61 +13,55 @@ async function getExtensionConfig() {
 
 // Fonction pour obtenir le cache local des animes téléchargés
 async function getAnimeCache() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(["animeList", "cacheTimestamp"], (data) => {
+  return new Promise(resolve => 
+    chrome.storage.local.get(["animeList", "cacheTimestamp"], (data) => 
       resolve({
-        animeList: data.animeList || new Set(),
+        animeList: new Set(data.animeList || []),
         timestamp: data.cacheTimestamp || 0
-      });
-    });
-  });
+      })
+    )
+  );
 }
 
 // Fonction pour sauvegarder le cache local
 async function saveAnimeCache(animeList) {
-  // Convertir Set en Array pour le stockage
-  const animeArray = Array.from(animeList);
   return new Promise((resolve) => {
     chrome.storage.local.set({
-      animeList: animeArray,
+      animeList: Array.from(animeList),
       cacheTimestamp: Date.now()
-    }, () => {
-      resolve();
-    });
+    }, resolve);
   });
 }
 
 // Fonction pour vérifier si un anime existe dans le cache local
 async function checkAnimeExistsLocal(animeUrl) {
-  const cache = await getAnimeCache();
-  // Normaliser l'URL recherchée
   const normalizedUrl = normalizeAnimeUrl(animeUrl);
   if (!normalizedUrl) return false;
   
-  // Convertir l'array en Set pour la recherche rapide
+  const cache = await getAnimeCache();
   // Normaliser toutes les URLs du cache pour comparaison
-  const animeSet = new Set((cache.animeList || []).map(url => normalizeAnimeUrl(url)));
-  return animeSet.has(normalizedUrl);
+  const normalizedCache = new Set([...cache.animeList].map(url => normalizeAnimeUrl(url)).filter(Boolean));
+  return normalizedCache.has(normalizedUrl);
 }
 
 // Fonction pour ajouter un anime au cache local
 async function addAnimeToCache(animeUrl) {
-  const cache = await getAnimeCache();
   const normalizedUrl = normalizeAnimeUrl(animeUrl);
   if (!normalizedUrl) return;
   
-  const animeSet = new Set((cache.animeList || []).map(url => normalizeAnimeUrl(url)));
+  const cache = await getAnimeCache();
+  const animeSet = new Set([...cache.animeList].map(url => normalizeAnimeUrl(url)).filter(Boolean));
   animeSet.add(normalizedUrl);
   await saveAnimeCache(animeSet);
 }
 
 // Fonction pour supprimer un anime du cache local
 async function removeAnimeFromCache(animeUrl) {
-  const cache = await getAnimeCache();
   const normalizedUrl = normalizeAnimeUrl(animeUrl);
   if (!normalizedUrl) return;
   
-  const animeSet = new Set((cache.animeList || []).map(url => normalizeAnimeUrl(url)));
+  const cache = await getAnimeCache();
+  const animeSet = new Set([...cache.animeList].map(url => normalizeAnimeUrl(url)).filter(Boolean));
   animeSet.delete(normalizedUrl);
   await saveAnimeCache(animeSet);
 }
@@ -79,65 +71,36 @@ async function queueAction(action, animeUrl, day = null) {
   return new Promise((resolve) => {
     chrome.storage.local.get(["actionQueue"], (data) => {
       const queue = data.actionQueue || [];
-      queue.push({
-        action: action, // 'add' ou 'remove'
-        animeUrl: animeUrl,
-        day: day,
-        timestamp: Date.now()
-      });
-      chrome.storage.local.set({ actionQueue: queue }, () => {
-        resolve();
-      });
+      queue.push({ action, animeUrl, day, timestamp: Date.now() });
+      chrome.storage.local.set({ actionQueue: queue }, resolve);
     });
   });
 }
 
 // Fonction pour détecter le jour de la semaine depuis la page (dans le contexte d'une carte)
 function detectDayFromPage(cardElement) {
-  const dayMapping = {
-    "lundi": "lundi",
-    "mardi": "mardi",
-    "mercredi": "mercredi",
-    "jeudi": "jeudi",
-    "vendredi": "vendredi",
-    "samedi": "samedi",
-    "dimanche": "dimanche"
-  };
-
-  // Chercher le conteneur parent avec selectedRow (qui contient le titre du jour)
+  const days = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
   let current = cardElement;
+  
   while (current && current !== document.body) {
-    // Vérifier si c'est un conteneur de jour (selectedRow)
-    if (current.classList && current.classList.contains("selectedRow")) {
-      // Chercher le titre du jour dans ce conteneur
+    if (current.classList?.contains("selectedRow")) {
       const titreJours = current.querySelector(".titreJours");
       if (titreJours) {
         const dayText = titreJours.textContent.trim().toLowerCase();
-        for (const [key, value] of Object.entries(dayMapping)) {
-          if (dayText.includes(key)) {
-            return value;
-          }
-        }
+        const foundDay = days.find(day => dayText.includes(day));
+        if (foundDay) return foundDay;
       }
     }
     current = current.parentElement;
   }
-
-  return null; // Pas de jour détecté, sera ajouté dans single_download
+  return null;
 }
 
 // Fonction pour vérifier si un anime existe (utilise le cache local)
 async function checkAnimeExists(animeUrl) {
   const config = await getExtensionConfig();
-  
-  if (!config.serverUrl || !config.isLoggedIn) {
-    return null;
-  }
-
-  // Utiliser le cache local au lieu de faire une requête HTTP
-  // Cela évite le problème de Mixed Content !
-  const exists = await checkAnimeExistsLocal(animeUrl);
-  return exists;
+  if (!config.serverUrl || !config.isLoggedIn) return null;
+  return await checkAnimeExistsLocal(animeUrl);
 }
 
 // Fonction pour ajouter un anime à la queue (utilise le cache local + queue)
@@ -149,19 +112,35 @@ async function addToDownload(animeUrl, cardElement, button) {
     return;
   }
 
+  // Vérifier si la saison contient des suffixes non supportés (ex: saison1hs)
+  if (hasUnsupportedSeasonSuffix(animeUrl)) {
+    const animeName = extractAnimeName(animeUrl);
+    showNotification(`${animeName} ne peut pas être ajouté car ce type de saison n'est pas supporté (ex: saison1hs)`, "error");
+    return;
+  }
+
+  // Vérifier d'abord si l'anime existe déjà dans le cache local
+  const alreadyExists = await checkAnimeExistsLocal(animeUrl);
+  if (alreadyExists) {
+    const animeName = extractAnimeName(animeUrl);
+    showNotification(`${animeName} est déjà dans la liste`, "error");
+    return;
+  }
+
   // Détecter le jour depuis la page (dans le contexte de la carte)
   // Si cardElement est null, on est sur une page de catalogue, donc day = null
   const day = cardElement ? detectDayFromPage(cardElement) : null;
 
-  // Mettre à jour le cache local immédiatement (pas de requête HTTP depuis la page)
+  // Mettre à jour le cache local immédiatement (optimiste, sera corrigé si échec)
   await addAnimeToCache(animeUrl);
   
   // Mettre l'action en queue pour synchronisation depuis le popup
   await queueAction('add', animeUrl, day);
   
   // Mettre à jour l'UI immédiatement
+  const animeName = extractAnimeName(animeUrl);
   const location = day ? `auto_download (${day})` : "single_download";
-  showNotification(`Anime ajouté dans ${location} ! (synchronisation en cours...)`, "success");
+  showNotification(`${animeName} ajouté dans ${location} ! Synchronisation en cours...`, "success");
   
   // Mettre à jour le bouton
   if (button) {
@@ -194,7 +173,8 @@ async function removeFromDownload(animeUrl, cardElement, button) {
   await queueAction('remove', animeUrl);
   
   // Mettre à jour l'UI immédiatement
-  showNotification("Anime supprimé ! (synchronisation en cours...)", "success");
+  const animeName = extractAnimeName(animeUrl);
+  showNotification(`${animeName} supprimé de la liste ! Synchronisation en cours...`, "success");
   
   // Mettre à jour le bouton
   if (button) {
@@ -231,21 +211,43 @@ function updateButtonState(button, cardElement, isInList) {
   }
 }
 
+// Fonction pour obtenir ou créer le conteneur de notifications
+function getNotificationContainer() {
+  let container = document.querySelector('.anime-notification-container');
+  if (!container) {
+    container = document.createElement("div");
+    container.className = "anime-notification-container";
+    document.body.appendChild(container);
+  }
+  return container;
+}
+
 // Fonction pour afficher une notification
 function showNotification(message, type) {
+  const container = getNotificationContainer();
   const notification = document.createElement("div");
   notification.className = `anime-download-notification ${type}`;
   notification.textContent = message;
-  document.body.appendChild(notification);
   
+  // Ajouter la notification en bas de la pile (les plus récentes en bas)
+  container.appendChild(notification);
+  
+  // Animation d'entrée
   setTimeout(() => {
     notification.classList.add("show");
   }, 10);
   
+  // Animation de sortie après 2 secondes
   setTimeout(() => {
     notification.classList.remove("show");
-    setTimeout(() => notification.remove(), 300);
-  }, 3000);
+    setTimeout(() => {
+      notification.remove();
+      // Supprimer le conteneur s'il est vide
+      if (container.children.length === 0) {
+        container.remove();
+      }
+    }, 300);
+  }, 2000); // Réduit à 2 secondes
 }
 
 // Fonction pour normaliser une URL d'anime (pour comparaison)
@@ -274,6 +276,49 @@ function normalizeAnimeUrl(url) {
   }
   
   return normalized;
+}
+
+// Fonction pour vérifier si une saison contient des lettres après le numéro (ex: saison1hs)
+// Accepte les saisons avec tirets (ex: saison1-2) mais rejette celles avec lettres (ex: saison1hs)
+function hasUnsupportedSeasonSuffix(animeUrl) {
+  if (!animeUrl) return false;
+  try {
+    // Format: /catalogue/name/saison1hs/vostfr/ ou /catalogue/name/saison1-2/vostfr/
+    // Rejeter si on trouve saison + chiffres + lettres (sans tiret avant les lettres)
+    // Accepter saison + chiffres + tiret + chiffres (ex: saison1-2)
+    const match = animeUrl.match(/\/catalogue\/[^\/]+\/saison(\d+)([a-zA-Z]+|\-\d+)?\//);
+    if (match && match[2]) {
+      // Si match[2] existe et contient uniquement des lettres (pas de tiret), c'est non supporté
+      if (/^[a-zA-Z]+$/.test(match[2])) {
+        return true; // saison1hs, saison2special, etc. → non supporté
+      }
+      // Si c'est un tiret suivi de chiffres (ex: -2), c'est supporté → return false
+    }
+    return false; // saison1, saison1-2, etc. → supporté
+  } catch (e) {
+    return false;
+  }
+}
+
+// Fonction pour extraire le nom de l'anime depuis l'URL
+function extractAnimeName(animeUrl) {
+  if (!animeUrl) return "Anime";
+  
+  try {
+    // Format: /catalogue/name/saison1/vostfr/
+    const match = animeUrl.match(/\/catalogue\/([^\/]+)\//);
+    if (match && match[1]) {
+      // Remplacer les tirets par des espaces et capitaliser
+      const name = match[1]
+        .split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+      return name;
+    }
+  } catch (e) {
+    // En cas d'erreur, retourner "Anime"
+  }
+  return "Anime";
 }
 
 // Fonction pour extraire l'URL de la carte
@@ -320,6 +365,24 @@ async function createDownloadButton(cardElement) {
   // Ignorer les scans et les URLs sans saison
   if (href.includes("/scan/") || !href.match(/\/saison\d+/)) {
     return;
+  }
+  
+  // Vérifier les saisons avec suffixes non supportés (ex: saison1hs)
+  // Accepter les saisons avec tirets (ex: saison1-2)
+  const seasonMatch = href.match(/\/saison(\d+)([a-zA-Z]+|\-\d+)?\//);
+  if (seasonMatch && seasonMatch[2] && /^[a-zA-Z]+$/.test(seasonMatch[2])) {
+    // Afficher un message au lieu d'un bouton pour les saisons non supportées
+    if (cardContent.querySelector(".anime-unsupported-season")) {
+      return; // Le message existe déjà
+    }
+    const messageDiv = document.createElement("div");
+    messageDiv.className = "anime-unsupported-season";
+    messageDiv.textContent = "Saison non supportée";
+    const messageContainer = document.createElement("div");
+    messageContainer.className = "anime-download-container";
+    messageContainer.appendChild(messageDiv);
+    cardContent.appendChild(messageContainer);
+    return; // Ne pas créer de bouton pour les saisons avec lettres (ex: saison1hs)
   }
   
   const animeUrl = extractAnimeUrl(cardElement);
@@ -403,17 +466,15 @@ async function initButtons() {
 }
 
 // Fonction pour vérifier si on est sur une page de catalogue
-function isCataloguePage() {
+const isCataloguePage = () => {
   const url = window.location.href;
+  // Vérifier que c'est une page catalogue avec saison
   return /\/catalogue\/.+\/saison.+\/.+\//.test(url);
-}
+};
 
 // Fonction pour obtenir l'URL de l'anime depuis la page de catalogue
-function getAnimeUrlFromCataloguePage() {
-  const path = window.location.pathname;
-  // Retourner le chemin relatif (ex: /catalogue/watatabe/saison1/vostfr/)
-  return path.endsWith('/') ? path : path + '/';
-}
+const getAnimeUrlFromCataloguePage = () => 
+  window.location.pathname.replace(/\/$/, '') + '/';
 
 // Fonction pour créer le bouton sur la page de catalogue
 async function createCatalogueDownloadButton() {
@@ -432,13 +493,26 @@ async function createCatalogueDownloadButton() {
     return;
   }
 
-  // Vérifier si le bouton existe déjà
-  if (container.querySelector('.catalogue-download-btn')) {
+  const animeUrl = getAnimeUrlFromCataloguePage();
+  if (!animeUrl) {
     return;
   }
 
-  const animeUrl = getAnimeUrlFromCataloguePage();
-  if (!animeUrl) {
+  // Vérifier si la saison est non supportée
+  if (hasUnsupportedSeasonSuffix(animeUrl)) {
+    // Afficher un message au lieu d'un bouton
+    if (container.querySelector('.catalogue-unsupported-season')) {
+      return; // Le message existe déjà
+    }
+    const messageDiv = document.createElement("div");
+    messageDiv.className = "catalogue-unsupported-season scrollBarStyled bg-gray-700 outline outline-gray-600 outline-1 rounded uppercase font-semibold text-sm sm:text-base text-white items-center py-1 px-3 sm:px-4 my-2 mx-1 sm:m-2";
+    messageDiv.textContent = "Saison non supportée";
+    container.appendChild(messageDiv);
+    return;
+  }
+
+  // Vérifier si le bouton existe déjà
+  if (container.querySelector('.catalogue-download-btn')) {
     return;
   }
 
@@ -549,6 +623,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'cacheUpdated') {
     // Le cache a été mis à jour, rafraîchir les boutons
     refreshAllButtons().then(() => {
+      // Afficher une notification selon le type de message
+      if (message.error) {
+        // Erreur lors de l'ajout ou suppression
+        // Essayer d'extraire le nom de l'anime depuis l'URL si disponible
+        let errorMessage = message.error;
+        if (message.animeUrl) {
+          const animeName = extractAnimeName(message.animeUrl);
+          errorMessage = errorMessage.replace(/Cet anime|Anime|Cet/, animeName);
+        }
+        showNotification(errorMessage, "error");
+      } else if (message.message) {
+        // Message de confirmation du serveur
+        let notificationMessage = message.message;
+        // Essayer d'extraire le nom de l'anime depuis l'URL si disponible
+        if (message.animeUrl) {
+          const animeName = extractAnimeName(message.animeUrl);
+          notificationMessage = notificationMessage.replace(/Cet anime|Anime|Cet/, animeName);
+        }
+        
+        if (notificationMessage.includes("déjà dans la liste")) {
+          showNotification(notificationMessage, "warning");
+        } else if (notificationMessage.includes("ajouté")) {
+          showNotification(notificationMessage, "success");
+        } else if (notificationMessage.includes("supprimé")) {
+          showNotification(notificationMessage, "success");
+        } else {
+          showNotification(notificationMessage, "success");
+        }
+      }
       sendResponse({ ok: true });
     });
     return true; // Indique qu'on répondra de manière asynchrone
