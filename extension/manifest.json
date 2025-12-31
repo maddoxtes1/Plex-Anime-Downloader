@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "anime-downloader-extension",
-  "version": "Beta-0.6.5",
-  "description": "Extension Chrome/Opera pour se connecter à un serveur Flask et afficher un dashboard.",
+  "version": "0.6.6",
+  "description": "Extension Chrome pour utiliser l'application Plex Anime Downloader",
   "icons": {
     "16": "icon.png",
     "48": "icon.png",
@@ -10,7 +10,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Flask Auth Client",
+    "default_title": "Plex Anime Downloader",
     "default_icon": {
       "16": "icon.png",
       "48": "icon.png",
