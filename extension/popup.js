@@ -26,13 +26,9 @@ let statusCheckInterval = null;
 let appInfo = null;
 
 function showView(name) {
-  viewServer.classList.add("hidden");
-  viewLogin.classList.add("hidden");
-  viewDashboard.classList.add("hidden");
-
-  if (name === "server") viewServer.classList.remove("hidden");
-  if (name === "login") viewLogin.classList.remove("hidden");
-  if (name === "dashboard") viewDashboard.classList.remove("hidden");
+  [viewServer, viewLogin, viewDashboard].forEach(view => view.classList.add("hidden"));
+  const views = { server: viewServer, login: viewLogin, dashboard: viewDashboard };
+  if (views[name]) views[name].classList.remove("hidden");
 }
 
 function setMessage(el, text, type = "") {
@@ -70,20 +66,10 @@ async function checkServerStatus() {
     updateServerStatus(false, "Aucun serveur configuré");
     return;
   }
-
   try {
-    const resp = await fetch(currentServer + "/api/ping", {
-      method: "GET",
-      cache: "no-cache",
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data.ok) {
-        updateServerStatus(true, "Serveur connecté");
-        return;
-      }
-    }
-    updateServerStatus(false, "Serveur non disponible");
+    const resp = await fetch(currentServer + "/api/ping", { cache: "no-cache" });
+    const data = await resp.json();
+    updateServerStatus(resp.ok && data.ok, resp.ok && data.ok ? "Serveur connecté" : "Serveur non disponible");
   } catch (e) {
     updateServerStatus(false, "Erreur de connexion");
   }
@@ -92,11 +78,9 @@ async function checkServerStatus() {
 function updateServerStatus(connected, text) {
   if (!statusIndicator || !statusText) return;
   statusText.textContent = text;
-  statusIndicator.className = "status-indicator " + (connected ? "connected" : "disconnected");
+  statusIndicator.className = `status-indicator ${connected ? "connected" : "disconnected"}`;
   const statusDot = statusIndicator.querySelector(".status-dot");
-  if (statusDot) {
-    statusDot.className = "status-dot " + (connected ? "connected" : "disconnected");
-  }
+  if (statusDot) statusDot.className = `status-dot ${connected ? "connected" : "disconnected"}`;
 }
 
 async function loadTheme() {
@@ -161,17 +145,19 @@ function applyTheme(colors) {
   
   // Appliquer les couleurs aux liens d'accès rapide
   const quickLinks = document.querySelectorAll('#quick-access a');
+  const accentRgb = hexToRgb(colors.accent_primary);
   quickLinks.forEach(link => {
-    link.style.background = `rgba(${hexToRgb(colors.accent_primary)}, 0.1)`;
-    link.style.border = `1px solid rgba(${hexToRgb(colors.accent_primary)}, 0.3)`;
-    link.addEventListener('mouseenter', () => {
-      link.style.background = `rgba(${hexToRgb(colors.accent_primary)}, 0.2)`;
+    link.style.background = `rgba(${accentRgb}, 0.1)`;
+    link.style.border = `1px solid rgba(${accentRgb}, 0.3)`;
+    // Utiliser onmouseenter/onmouseleave pour éviter les doublons
+    link.onmouseenter = () => {
+      link.style.background = `rgba(${accentRgb}, 0.2)`;
       link.style.transform = 'translateY(-2px)';
-    });
-    link.addEventListener('mouseleave', () => {
-      link.style.background = `rgba(${hexToRgb(colors.accent_primary)}, 0.1)`;
+    };
+    link.onmouseleave = () => {
+      link.style.background = `rgba(${accentRgb}, 0.1)`;
       link.style.transform = 'translateY(0)';
-    });
+    };
   });
 }
 
@@ -184,24 +170,14 @@ function hexToRgb(hex) {
 
 async function loadAppInfo() {
   if (!currentServer) return null;
-  
   try {
     const resp = await fetch(currentServer + "/api/app-info");
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data.ok) {
-        return data;
-      }
-    }
+    const data = await resp.json();
+    if (resp.ok && data.ok) return data;
   } catch (e) {
     console.error("Erreur lors du chargement des infos de l'app:", e);
   }
-  // Valeurs par défaut
-  return {
-    app_name: "Plex Anime Downloader",
-    local_dashboard_port: 5001,
-    anime_sama_url: "https://anime-sama.eu"
-  };
+  return { app_name: "Plex Anime Downloader", local_dashboard_port: 5001, anime_sama_url: "https://anime-sama.tv" };
 }
 
 async function loadDashboard() {
@@ -246,7 +222,15 @@ async function loadDashboard() {
   // Mettre à jour le lien anime-sama
   const linkAnimeSama = document.getElementById("link-anime-sama");
   if (linkAnimeSama && appInfo) {
-    linkAnimeSama.href = appInfo.anime_sama_url || "https://anime-sama.eu";
+    const animeUrl = appInfo.anime_sama_url || "https://anime-sama.tv";
+    linkAnimeSama.href = animeUrl;
+    // Extraire le nom du domaine pour l'affichage
+    try {
+      const url = new URL(animeUrl);
+      linkAnimeSama.textContent = `🎬 ${url.hostname.replace('www.', '')}`;
+    } catch (e) {
+      linkAnimeSama.textContent = "🎬 Anime-Sama";
+    }
   }
 
   // Vérifier le statut du serveur
@@ -273,19 +257,13 @@ async function loadDashboard() {
     dashboardMessage.textContent = message;
     
     // Extraire l'IP du serveur depuis l'URL
-    let serverDisplay = currentServer;
     try {
       const url = new URL(currentServer);
-      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-        serverDisplay = 'localhost';
-      } else {
-        serverDisplay = url.hostname;
-      }
+      const hostname = url.hostname;
+      dashboardInfo.textContent = `Connecté sur ${hostname === 'localhost' || hostname === '127.0.0.1' ? 'localhost' : hostname}`;
     } catch (e) {
-      // Si l'URL n'est pas valide, utiliser tel quel
+      dashboardInfo.textContent = `Connecté sur ${currentServer}`;
     }
-    
-    dashboardInfo.textContent = `Connecté sur ${serverDisplay}`;
 
     showView("dashboard");
   } catch (e) {
@@ -340,51 +318,31 @@ btnLogin.addEventListener("click", async () => {
     showView("server");
     return;
   }
-
   const username = inputUser.value.trim();
   const password = inputPass.value.trim();
   if (!username || !password) {
     setMessage(loginMessage, "Username et mot de passe obligatoires.", "error");
     return;
   }
-
   btnLogin.disabled = true;
   setMessage(loginMessage, "Connexion en cours...");
-
   try {
     const resp = await fetch(currentServer + "/api/login", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
-
     const data = await resp.json();
     if (!resp.ok || !data.ok) {
-      setMessage(
-        loginMessage,
-        data.error || "Erreur de connexion.",
-        "error"
-      );
+      setMessage(loginMessage, data.error || "Erreur de connexion.", "error");
       return;
     }
-
     currentUser = data.user;
     await saveState();
     setMessage(loginMessage, "Connexion réussie.", "success");
-
-    // Charger le dashboard
     await loadDashboard();
-    
-    // Synchroniser immédiatement après la connexion
-    try {
-      chrome.runtime.sendMessage({ type: 'forceSync' }).catch(() => {});
-    } catch (e) {
-      // Ignorer les erreurs
-    }
+    chrome.runtime.sendMessage({ type: 'forceSync' }).catch(() => {});
   } catch (e) {
-    console.error(e);
     setMessage(loginMessage, "Erreur réseau pendant la connexion.", "error");
   } finally {
     btnLogin.disabled = false;
@@ -430,13 +388,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   
   // Notifier le background script pour démarrer la synchronisation automatique
-  // Le background script gère maintenant toute la synchronisation automatique
   if (currentUser && currentServer) {
-    chrome.runtime.sendMessage({ type: 'startSync' }).catch(() => {
-      // Ignorer si le background script n'est pas encore prêt
-    });
-    
-    // Forcer une synchronisation immédiate au chargement du popup
+    chrome.runtime.sendMessage({ type: 'startSync' }).catch(() => {});
     chrome.runtime.sendMessage({ type: 'forceSync' }).catch(() => {});
   }
 })();
