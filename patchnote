@@ -1,5 +1,29 @@
 beta-0.7.0
 
+## 🎨 Nouveaux thèmes style anime
+
+### ✨ Deux nouveaux thèmes ajoutés
+Deux nouveaux thèmes inspirés de l'univers anime ont été ajoutés pour personnaliser votre interface :
+
+#### 🖤 Manga Noir
+Un thème sombre et dynamique inspiré du style manga :
+- **Fond** : Noir profond avec effets de lueur subtils
+- **Accents** : Rouge vif (#ff1744), orange (#ff6d00), jaune (#ffea00)
+- **Style** : Effets de lueur et ombres pour un rendu cinématographique
+- **Parfait pour** : Les fans de manga et d'anime avec un goût pour les thèmes sombres et énergiques
+
+#### 🌸 Ghibli Dream
+Un thème doux et pastel inspiré des films Studio Ghibli :
+- **Fond** : Beige/crème avec dégradés subtils et effets de lumière naturelle
+- **Accents** : Vert olive (#8b9a46), beige chaud (#c4a77d), vert menthe (#a8c5a0)
+- **Style** : Ambiance douce et apaisante, rappelant la nature et les paysages Ghibli
+- **Parfait pour** : Les amateurs de Studio Ghibli qui préfèrent une interface douce et harmonieuse
+
+### 🔄 Disponibilité
+- **Dashboard local** : Sélectionnables dans l'onglet Paramètres
+- **Extension navigateur** : Synchronisation automatique avec le thème du dashboard
+- **Compatibilité** : Fonctionnent avec tous les éléments de l'interface (cartes, boutons, onglets, etc.)
+
 ## 📅 Système de scan du planning anime-sama
 
 ### 🆕 Nouvelle fonctionnalité majeure
