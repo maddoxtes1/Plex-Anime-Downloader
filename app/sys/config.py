@@ -1,7 +1,7 @@
 _ENV_CONFIG = {
     "plex_anime_downloader_V": {
         "env_var": "PLEX_ANIME_DOWNLOADER_V",
-        "default": "Beta-0.6.6",
+        "default": "Beta-0.7.0",
         "type": str,
         "use_default": True
     },
@@ -57,6 +57,9 @@ _Folder_Config = {
                 "file_script_params": {
                     "db_path": ":users.db:"
                 }
+            },
+            "planning_scan_data.json": {
+                "default_content": "none"
             }
         }
 
@@ -109,7 +112,7 @@ _File_Config = {
     ".env": {
         "type": "env",
         "default": {
-            "Version": "Beta-0.6.6",
+            "Version": "Beta-0.7.0",
             "Server_ID": "none",
         }
     },
@@ -125,8 +128,11 @@ _File_Config = {
             },
             "scan-option": {
                 "anime-sama": True,
-                "as_Baseurl": "https://anime-sama.tv",
                 "franime": False
+            },
+            "anime_sama": {
+                "base_url": "https://anime-sama.tv",
+                "auto_planning": True,
             }
             }
     },

@@ -10,3 +10,4 @@ franime.log
 franime.py
 franime_api.py
 patchnote
+__pycache__/

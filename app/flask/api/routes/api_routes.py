@@ -327,14 +327,17 @@ def create_api_blueprint(helpers, queue_manager=None):
         from app.sys import FolderConfig
         import configparser
         
-        # Récupérer as_Baseurl depuis config.conf
+        # Récupérer base_url depuis config.conf (nouvelle structure anime_sama.base_url)
         anime_sama_url = "https://anime-sama.tv"  # Valeur par défaut
         try:
             config_path = FolderConfig.find_path(file_name="config.conf")
             if config_path and config_path.exists():
                 config = configparser.ConfigParser(allow_no_value=True)
                 config.read(config_path, encoding='utf-8')
-                if config.has_section("scan-option") and config.has_option("scan-option", "as_Baseurl"):
+                # Essayer d'abord la nouvelle structure, puis l'ancienne pour compatibilité
+                if config.has_section("anime_sama") and config.has_option("anime_sama", "base_url"):
+                    anime_sama_url = config.get("anime_sama", "base_url")
+                elif config.has_section("scan-option") and config.has_option("scan-option", "as_Baseurl"):
                     anime_sama_url = config.get("scan-option", "as_Baseurl")
         except Exception:
             pass

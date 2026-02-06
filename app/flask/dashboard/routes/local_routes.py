@@ -13,6 +13,7 @@ from flask import (
     jsonify,
     Response,
     stream_with_context,
+    copy_current_request_context,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
@@ -45,93 +46,11 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
     """
     local_bp = Blueprint("local", __name__)
     
-    
-    
     # Durée d'expiration de session : 5 minutes
     SESSION_TIMEOUT = timedelta(minutes=5)
     
-    @local_bp.before_request
-    def check_session_expiry():
-        """
-        Vérifie si la session a expiré (5 minutes d'inactivité).
-        """
-        if session.get("local_authenticated"):
-            last_activity = session.get("last_activity")
-            if last_activity:
-                try:
-                    last_activity_dt = datetime.fromisoformat(last_activity)
-                    if datetime.now() - last_activity_dt > SESSION_TIMEOUT:
-                        # Session expirée
-                        session.pop("local_authenticated", None)
-                        session.pop("last_activity", None)
-                        flash("Votre session a expiré. Veuillez vous reconnecter.", "error")
-                        return redirect(url_for("local.local_login"))
-                except (ValueError, TypeError):
-                    # Format invalide, réinitialiser
-                    session.pop("local_authenticated", None)
-                    session.pop("last_activity", None)
-            
-            # Mettre à jour la dernière activité
-            session["last_activity"] = datetime.now().isoformat()
-            session.permanent = True
-
-    @local_bp.route("/", methods=["GET", "POST"])
-    def local_login():
-        """
-        Page locale protégée par un seul mot de passe admin (type Vaultwarden).
-        """
-        if session.get("local_authenticated"):
-            return redirect(url_for("local.local_dashboard") + "#news")
-
-        if request.method == "POST":
-            password = (request.form.get("password") or "").strip()
-            if not password:
-                flash("Veuillez entrer le mot de passe.", "error")
-            else:
-                try:
-                    is_valid = check_password_hash(local_admin_password_hash, password)
-                    if not is_valid:
-                        flash("Mot de passe invalide.", "error")
-                    else:
-                        session["local_authenticated"] = True
-                        session["last_activity"] = datetime.now().isoformat()
-                        session.permanent = True
-                        flash("Connexion réussie.", "success")
-                        return redirect(url_for("local.local_dashboard") + "#news")
-                except Exception as e:
-                    flash(f"Erreur lors de la vérification du mot de passe: {str(e)}", "error")
-
-        # Récupérer le thème actuel pour la page de connexion
-        from app.sys import FolderConfig
-        import configparser
-        
-        current_theme = "neon-cyberpunk"  # Valeur par défaut
-        try:
-            config_file = FolderConfig.find_path(file_name="config.conf")
-            if config_file and config_file.exists():
-                config = configparser.ConfigParser(allow_no_value=True)
-                config.read(config_file, encoding='utf-8')
-                if config.has_section("settings") and config.has_option("settings", "theme"):
-                    current_theme = config.get("settings", "theme")
-        except Exception:
-            pass
-        
-        login_theme_css = get_login_page_css(current_theme)
-
-        return render_template("access.html", theme_css=login_theme_css)
-
-    @local_bp.route("/local/dashboard")
-    def local_dashboard():
-        """
-        Dashboard local :
-        - gestion des utilisateurs
-        - édition de config.conf
-        - édition de plex_path.json
-        """
-        if not session.get("local_authenticated"):
-            flash("Vous devez être connecté avec le mot de passe admin.", "error")
-            return redirect(url_for("local.local_login"))
-
+    def _prepare_dashboard_data():
+        """Prépare les données communes pour toutes les pages du dashboard"""
         conn = helpers.get_db_connection()
         users = conn.execute("SELECT username FROM users ORDER BY username").fetchall()
         conn.close()
@@ -172,7 +91,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
                         'size_mb': round(file_size / (1024 * 1024), 2)
                     })
         
-        # Récupérer les actualités depuis le serveur externe et enregistrer le serveur
+        # Récupérer les actualités depuis le serveur externe
         news_list = []
         news_error = None
         news_disabled = False
@@ -188,7 +107,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
                     news_enabled = config.get('settings', 'news', fallback='True').lower() == 'true'
                     news_disabled = not news_enabled
         except Exception:
-            pass  # En cas d'erreur, utiliser True par défaut
+            pass
         
         # Ne faire la requête que si news est activé
         if news_enabled:
@@ -278,24 +197,141 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
             # Si news est désactivé, ne pas faire de requête
             news_list = []
             news_error = None
+        
+        return {
+            'users': users,
+            'config': cfg,
+            'plex_entries': plex_entries,
+            'plex_root': plex_root,
+            'CONFIG_PATH': config_path,
+            'theme_css': theme_css,
+            'theme_colors': theme_colors,
+            'current_theme': current_theme,
+            'available_themes': available_themes,
+            'log_files': log_files,
+            'logs_path': str(logs_path) if logs_path else None,
+            'news_list': news_list,
+            'news_error': news_error,
+            'news_disabled': news_disabled,
+        }
+    
+    @local_bp.before_request
+    def check_session_expiry():
+        """
+        Vérifie si la session a expiré (5 minutes d'inactivité).
+        """
+        if session.get("local_authenticated"):
+            last_activity = session.get("last_activity")
+            if last_activity:
+                try:
+                    last_activity_dt = datetime.fromisoformat(last_activity)
+                    if datetime.now() - last_activity_dt > SESSION_TIMEOUT:
+                        # Session expirée
+                        session.pop("local_authenticated", None)
+                        session.pop("last_activity", None)
+                        flash("Votre session a expiré. Veuillez vous reconnecter.", "error")
+                        return redirect(url_for("local.local_login"))
+                except (ValueError, TypeError):
+                    # Format invalide, réinitialiser
+                    session.pop("local_authenticated", None)
+                    session.pop("last_activity", None)
+            
+            # Mettre à jour la dernière activité
+            session["last_activity"] = datetime.now().isoformat()
+            session.permanent = True
 
-        return render_template(
-            "local_dashboard.html",
-            users=users,
-            config=cfg,
-            plex_entries=plex_entries,
-            plex_root=plex_root,
-            CONFIG_PATH=config_path,
-            theme_css=theme_css,
-            theme_colors=theme_colors,
-            current_theme=current_theme,
-            available_themes=available_themes,
-            log_files=log_files,
-            logs_path=str(logs_path) if logs_path else None,
-            news_list=news_list,
-            news_error=news_error,
-            news_disabled=news_disabled,
-        )
+    @local_bp.route("/", methods=["GET", "POST"])
+    def local_login():
+        """
+        Page locale protégée par un seul mot de passe admin (type Vaultwarden).
+        """
+        if session.get("local_authenticated"):
+            return redirect(url_for("local.local_dashboard") + "#news")
+
+        if request.method == "POST":
+            password = (request.form.get("password") or "").strip()
+            if not password:
+                flash("Veuillez entrer le mot de passe.", "error")
+            else:
+                try:
+                    is_valid = check_password_hash(local_admin_password_hash, password)
+                    if not is_valid:
+                        flash("Mot de passe invalide.", "error")
+                    else:
+                        session["local_authenticated"] = True
+                        session["last_activity"] = datetime.now().isoformat()
+                        session.permanent = True
+                        flash("Connexion réussie.", "success")
+                        return redirect(url_for("local.local_dashboard") + "#news")
+                except Exception as e:
+                    flash(f"Erreur lors de la vérification du mot de passe: {str(e)}", "error")
+
+        # Récupérer le thème actuel pour la page de connexion
+        from app.sys import FolderConfig
+        import configparser
+        
+        current_theme = "neon-cyberpunk"  # Valeur par défaut
+        try:
+            config_file = FolderConfig.find_path(file_name="config.conf")
+            if config_file and config_file.exists():
+                config = configparser.ConfigParser(allow_no_value=True)
+                config.read(config_file, encoding='utf-8')
+                if config.has_section("settings") and config.has_option("settings", "theme"):
+                    current_theme = config.get("settings", "theme")
+        except Exception:
+            pass
+        
+        login_theme_css = get_login_page_css(current_theme)
+
+        return render_template("access.html", theme_css=login_theme_css)
+
+    @local_bp.route("/local/dashboard")
+    def local_dashboard():
+        """Redirige vers la page news par défaut"""
+        if not session.get("local_authenticated"):
+            flash("Vous devez être connecté avec le mot de passe admin.", "error")
+            return redirect(url_for("local.local_login"))
+        return redirect(url_for("local.local_dashboard_news"))
+    
+    @local_bp.route("/local/dashboard/news")
+    def local_dashboard_news():
+        """Page Actualités"""
+        if not session.get("local_authenticated"):
+            flash("Vous devez être connecté avec le mot de passe admin.", "error")
+            return redirect(url_for("local.local_login"))
+        
+        data = _prepare_dashboard_data()
+        return render_template("news.html", **data)
+    
+    @local_bp.route("/local/dashboard/planning")
+    def local_dashboard_planning():
+        """Page Planning"""
+        if not session.get("local_authenticated"):
+            flash("Vous devez être connecté avec le mot de passe admin.", "error")
+            return redirect(url_for("local.local_login"))
+        
+        data = _prepare_dashboard_data()
+        return render_template("planning.html", **data)
+    
+    @local_bp.route("/local/dashboard/logs")
+    def local_dashboard_logs():
+        """Page Logs"""
+        if not session.get("local_authenticated"):
+            flash("Vous devez être connecté avec le mot de passe admin.", "error")
+            return redirect(url_for("local.local_login"))
+        
+        data = _prepare_dashboard_data()
+        return render_template("logs.html", **data)
+    
+    @local_bp.route("/local/dashboard/settings")
+    def local_dashboard_settings():
+        """Page Paramètres"""
+        if not session.get("local_authenticated"):
+            flash("Vous devez être connecté avec le mot de passe admin.", "error")
+            return redirect(url_for("local.local_login"))
+        
+        data = _prepare_dashboard_data()
+        return render_template("settings.html", **data)
 
     @local_bp.route("/local/users/create", methods=["POST"])
     def local_create_user():
@@ -307,15 +343,15 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         password = (request.form.get("password") or "").strip()
         if not username or not password:
             flash("Nom d'utilisateur et mot de passe requis.", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         if helpers.get_user_by_username(username):
             flash("Cet utilisateur existe déjà.", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         helpers.save_user(username, generate_password_hash(password))
         flash(f"Utilisateur '{username}' créé.", "success")
-        return redirect(url_for("local.local_dashboard") + "#settings")
+        return redirect(url_for("local.local_dashboard_settings"))
 
     @local_bp.route("/local/users/delete", methods=["POST"])
     def local_delete_user():
@@ -326,14 +362,14 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         username = (request.form.get("username") or "").strip()
         if not username:
             flash("Aucun utilisateur spécifié.", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         conn = helpers.get_db_connection()
         with conn:
             conn.execute("DELETE FROM users WHERE username = ?", (username,))
         conn.close()
         flash(f"Utilisateur '{username}' supprimé.", "success")
-        return redirect(url_for("local.local_dashboard") + "#settings")
+        return redirect(url_for("local.local_dashboard_settings"))
 
     @local_bp.route("/local/config", methods=["POST"])
     def local_update_config():
@@ -346,23 +382,24 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
             timer = int(request.form.get("timer") or "3600")
         except ValueError:
             flash("Threads et timer doivent être des nombres entiers.", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         anime_sama = request.form.get("anime_sama") == "on"
         franime = request.form.get("franime") == "on"
         news = request.form.get("news") == "on"
         log_level = request.form.get("log_level", "INFO").strip()
         as_Baseurl = (request.form.get("as_Baseurl") or "").strip()
+        auto_planning = request.form.get("auto_planning") == "on"
 
         # Valider l'URL si fournie
         if as_Baseurl:
             if not as_Baseurl.startswith(("http://", "https://")):
                 flash("L'URL de base doit commencer par http:// ou https://", "error")
-                return redirect(url_for("local.local_dashboard") + "#settings")
+                return redirect(url_for("local.local_dashboard_settings"))
 
-        helpers.save_config_conf(threads, timer, anime_sama, franime, news=news, log_level=log_level, as_Baseurl=as_Baseurl if as_Baseurl else None)
+        helpers.save_config_conf(threads, timer, anime_sama, franime, news=news, log_level=log_level, as_Baseurl=as_Baseurl if as_Baseurl else None, auto_planning=auto_planning)
         flash("Configuration sauvegardée.", "success")
-        return redirect(url_for("local.local_dashboard") + "#settings")
+        return redirect(url_for("local.local_dashboard_settings"))
 
     @local_bp.route("/local/theme", methods=["POST"])
     def local_update_theme():
@@ -373,13 +410,13 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         theme_name = (request.form.get("theme") or "").strip()
         if not theme_name:
             flash("Thème manquant.", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         # Vérifier que le thème existe
         available_themes = get_available_themes()
         if theme_name not in available_themes:
             flash("Thème invalide.", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         # Sauvegarder le thème dans config.conf
         from app.sys import FolderConfig
@@ -397,7 +434,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
                 config.write(configfile)
         
         flash(f"Thème changé pour '{available_themes[theme_name]}'.", "success")
-        return redirect(url_for("local.local_dashboard") + "#settings")
+        return redirect(url_for("local.local_dashboard_settings"))
 
     @local_bp.route("/local/logs/list", methods=["GET"])
     def local_logs_list():
@@ -614,7 +651,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
 
         if not path_name:
             flash("Le nom du dossier (path) est obligatoire.", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         languages = [
             lang.strip()
@@ -640,7 +677,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
                 + "; ".join(conflicts),
                 "error",
             )
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         # création du dossier physique si demandé
         try:
@@ -648,7 +685,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
             os.makedirs(os.path.join(plex_root, path_name), exist_ok=True)
         except OSError as e:
             flash(f"Erreur lors de la création du dossier: {e}", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         # mise à jour / ajout
         updated = False
@@ -662,7 +699,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
 
         helpers.save_plex_paths(entries)
         flash("Configuration plex_path.json mise à jour.", "success")
-        return redirect(url_for("local.local_dashboard") + "#settings")
+        return redirect(url_for("local.local_dashboard_settings"))
 
     @local_bp.route("/local/plex/update", methods=["POST"])
     def local_plex_update():
@@ -675,7 +712,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         languages_raw = (request.form.get("languages") or "").strip()
         if not old_path or not path_name:
             flash("Path manquant.", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         languages = [
             lang.strip()
@@ -704,7 +741,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
                 + "; ".join(conflicts),
                 "error",
             )
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         found = False
         for item in entries:
@@ -719,7 +756,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         else:
             helpers.save_plex_paths(entries)
             flash("Entrée mise à jour.", "success")
-        return redirect(url_for("local.local_dashboard") + "#settings")
+        return redirect(url_for("local.local_dashboard_settings"))
 
     @local_bp.route("/local/plex/delete", methods=["POST"])
     def local_plex_delete():
@@ -730,7 +767,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         path_name = (request.form.get("path") or "").strip()
         if not path_name:
             flash("Path manquant.", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         # Supprimer le dossier physique s'il existe
         folder_path = os.path.join(plex_root, path_name)
@@ -758,7 +795,197 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         new_entries = [e for e in entries if e["path"] != path_name]
         helpers.save_plex_paths(new_entries)
         
-        return redirect(url_for("local.local_dashboard") + "#settings")
+        return redirect(url_for("local.local_dashboard_settings"))
+
+    @local_bp.route("/local/planning/anime/details", methods=["POST"])
+    def local_planning_anime_details():
+        """Récupère les détails d'un anime (description, saisons, épisodes installés)"""
+        if not session.get("local_authenticated"):
+            return jsonify({"error": "Non autorisé"}), 401
+        
+        try:
+            data = request.get_json(silent=True) or {}
+            anime_name = data.get("name", "").strip()
+            anime_season = data.get("season", "").strip()
+            anime_langage = data.get("langage", "").strip()
+            
+            if not anime_name:
+                return jsonify({"error": "Le nom de l'anime est requis"}), 400
+            
+            # Importer la fonction d'extraction des détails
+            from app.streaming.api.anime_sama_api import extract_anime_details
+            from app.sys.database import database
+            from app.sys import FolderConfig, EnvConfig
+            import os
+            
+            # Récupérer les détails depuis anime-sama
+            details = extract_anime_details(anime_name)
+            if not details:
+                return jsonify({"error": "Impossible de récupérer les détails de l'anime"}), 404
+            
+            # Compter les épisodes installés dans la database
+            episodes_installed = 0
+            episodes_total = 0
+            
+            try:
+                # Récupérer le path pour cette langue
+                plex_path_json = FolderConfig.find_path(file_name="plex_path.json")
+                if plex_path_json and plex_path_json.exists():
+                    with open(plex_path_json, 'r', encoding='utf-8') as f:
+                        plex_data = json.load(f)
+                    
+                    path_entries = [item for item in plex_data if isinstance(item, dict) and 'path' in item and 'language' in item]
+                    found_paths = []
+                    for entry in path_entries:
+                        if anime_langage in entry.get('language', []):
+                            found_paths.append(entry['path'])
+                    
+                    if found_paths:
+                        folder_name = found_paths[0]
+                        plex_path = EnvConfig.get_env("plex_path")
+                        path_name = os.path.join(plex_path, folder_name)
+                        
+                        # Construire le path_list
+                        season_name = f"season {anime_season}"
+                        path_list = (folder_name, anime_name, season_name)
+                        
+                        # Interroger la database
+                        db = database()
+                        all_episodes = db.get_all_episodes(path_list)
+                        installed_episodes = db.get_installed_episodes(path_list)
+                        
+                        episodes_total = len(all_episodes) if all_episodes else 0
+                        episodes_installed = len(installed_episodes) if installed_episodes else 0
+            except Exception as e:
+                # Si erreur, on continue sans les infos d'épisodes
+                pass
+            
+            # Récupérer l'URL de base depuis la config
+            from app.sys import FolderConfig
+            config_path = FolderConfig.find_path(file_name="config.conf")
+            config = configparser.ConfigParser(allow_no_value=True)
+            config.read(config_path, encoding='utf-8')
+            as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
+            
+            # Construire l'URL complète de l'anime
+            anime_url = f"{as_baseurl}/catalogue/{anime_name}/"
+            
+            result = {
+                "title": details.get("title", anime_name),
+                "image": details.get("image", ""),
+                "description": details.get("description", "Description non disponible"),
+                "seasons": details.get("seasons", []),
+                "seasons_count": details.get("seasons_count", 0),
+                "episodes_installed": episodes_installed,
+                "episodes_total": episodes_total,
+                "episodes_missing": episodes_total - episodes_installed,
+                "anime_url": anime_url
+            }
+            
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    
+    @local_bp.route("/local/planning/anime/delete", methods=["POST"])
+    def local_planning_anime_delete():
+        """Supprime un anime de anime.json et de planning_scan_data.json"""
+        if not session.get("local_authenticated"):
+            return jsonify({"error": "Non autorisé"}), 401
+        
+        try:
+            data = request.get_json(silent=True) or {}
+            anime_name = data.get("name", "").strip()
+            anime_season = data.get("season", "").strip()
+            anime_langage = data.get("langage", "").strip()
+            anime_day = data.get("anime_day", "").strip()  # "0"-"8" pour identifier la section
+            
+            if not anime_name or not anime_season or not anime_langage:
+                return jsonify({"error": "Les informations de l'anime sont incomplètes"}), 400
+            
+            from app.sys import FolderConfig
+            import copy
+            
+            # Supprimer de anime.json
+            anime_json_path = FolderConfig.find_path(file_name="anime.json")
+            if anime_json_path and anime_json_path.exists():
+                with open(anime_json_path, 'r', encoding='utf-8') as f:
+                    anime_data = json.load(f)
+                
+                anime_data_copy = copy.deepcopy(anime_data)
+                deleted_from_json = False
+                
+                # Mapping des jours
+                jours_mapping = {
+                    "0": "lundi", "1": "mardi", "2": "mercredi", "3": "jeudi",
+                    "4": "vendredi", "5": "samedi", "6": "dimanche", "7": "no_day", "8": "single_download"
+                }
+                
+                for entry in anime_data_copy:
+                    # Traiter single_download (jour 8)
+                    if anime_day == "8" and "single_download" in entry:
+                        single_list = entry.get("single_download", [])
+                        if isinstance(single_list, list):
+                            original_len = len(single_list)
+                            entry["single_download"] = [
+                                a for a in single_list
+                                if not (a.get("name") == anime_name and 
+                                       a.get("season") == anime_season and 
+                                       a.get("langage") == anime_langage)
+                            ]
+                            if len(entry["single_download"]) < original_len:
+                                deleted_from_json = True
+                    
+                    # Traiter auto_download
+                    if "auto_download" in entry:
+                        jour_name = jours_mapping.get(anime_day)
+                        if jour_name and jour_name in entry["auto_download"]:
+                            anime_list = entry["auto_download"][jour_name]
+                            if isinstance(anime_list, list):
+                                original_len = len(anime_list)
+                                entry["auto_download"][jour_name] = [
+                                    a for a in anime_list
+                                    if not (a.get("name") == anime_name and 
+                                           a.get("season") == anime_season and 
+                                           a.get("langage") == anime_langage)
+                                ]
+                                if len(entry["auto_download"][jour_name]) < original_len:
+                                    deleted_from_json = True
+                
+                if deleted_from_json:
+                    with open(anime_json_path, 'w', encoding='utf-8') as f:
+                        json.dump(anime_data_copy, f, indent=4, ensure_ascii=False)
+            
+            # Supprimer de planning_scan_data.json
+            database_path = FolderConfig.find_path(folder_name="database")
+            planning_data_path = database_path / "planning_scan_data.json"
+            deleted_from_planning = False
+            
+            if planning_data_path.exists():
+                with open(planning_data_path, 'r', encoding='utf-8') as f:
+                    planning_data = json.load(f)
+                
+                if "results" in planning_data and isinstance(planning_data["results"], list):
+                    original_count = len(planning_data["results"])
+                    planning_data["results"] = [
+                        r for r in planning_data["results"]
+                        if not (r.get("name") == anime_name and 
+                               r.get("season") == anime_season and 
+                               r.get("langage") == anime_langage)
+                    ]
+                    if len(planning_data["results"]) < original_count:
+                        deleted_from_planning = True
+                        planning_data["total"] = len(planning_data["results"])
+                        with open(planning_data_path, 'w', encoding='utf-8') as f:
+                            json.dump(planning_data, f, indent=2, ensure_ascii=False)
+            
+            return jsonify({
+                "success": True,
+                "deleted_from_json": deleted_from_json,
+                "deleted_from_planning": deleted_from_planning,
+                "message": "Anime supprimé avec succès"
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     @local_bp.route("/local/logout")
     def local_logout():
@@ -787,7 +1014,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
         
         if not os.path.exists(extension_dir):
             flash("Le dossier extension est introuvable.", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
 
         # Créer un fichier ZIP temporaire
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
@@ -820,7 +1047,7 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
             )
         except Exception as e:
             flash(f"Erreur lors de la création du ZIP: {e}", "error")
-            return redirect(url_for("local.local_dashboard") + "#settings")
+            return redirect(url_for("local.local_dashboard_settings"))
         finally:
             # Nettoyer le fichier temporaire après l'envoi
             if os.path.exists(temp_file.name):
@@ -828,6 +1055,141 @@ def create_local_blueprint(helpers, app_config, plex_root, config_path, local_ad
                     os.unlink(temp_file.name)
                 except:
                     pass
+
+    @local_bp.route("/local/planning/status", methods=["GET"])
+    def local_planning_status():
+        """Récupère le statut du scan du planning"""
+        if not session.get("local_authenticated"):
+            return jsonify({"error": "Non autorisé"}), 401
+        
+        try:
+            from app.streaming.manager import get_planning_scan_status
+            status_data = get_planning_scan_status()
+            return jsonify(status_data)
+        except Exception as e:
+            return jsonify({"status": "error", "error": str(e)}), 500
+    
+    @local_bp.route("/local/planning/data", methods=["GET"])
+    def local_planning_data():
+        """Récupère les données du dernier scan du planning"""
+        if not session.get("local_authenticated"):
+            return jsonify({"error": "Non autorisé"}), 401
+        
+        try:
+            from app.sys import FolderConfig
+            database_path = FolderConfig.find_path(folder_name="database")
+            data_path = database_path / "planning_scan_data.json"
+            
+            if data_path.exists():
+                with open(data_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return jsonify(data)
+            else:
+                return jsonify({"results": [], "scan_date": None, "total": 0, "message": "Aucune donnée disponible"})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    
+    @local_bp.route("/local/planning/scan", methods=["POST"])
+    def local_planning_scan():
+        """Lance un scan manuel du planning"""
+        if not session.get("local_authenticated"):
+            return jsonify({"error": "Non autorisé"}), 401
+        
+        try:
+            from app.sys import FolderConfig
+            from app.streaming.function.anime_sama import anime_sama_planning
+            from app.streaming.api.anime_sama_api import extract_anime_info
+            from app.streaming.manager import get_planning_scan_status, set_planning_scan_status
+            
+            database_path = FolderConfig.find_path(folder_name="database")
+            
+            # Vérifier si un scan est déjà en cours
+            current_status = get_planning_scan_status()
+            if current_status.get("status") == "running":
+                return jsonify({"status": "running", "message": "Un scan est déjà en cours"})
+            
+            # Lancer le scan dans un thread
+            @copy_current_request_context
+            def run_scan():
+                try:
+                    # Marquer le scan comme en cours
+                    set_planning_scan_status("running", started_at=datetime.now().isoformat())
+                    
+                    planning = anime_sama_planning()
+                    results = planning.run()
+                    
+                    # Enrichir les résultats avec les infos (nom réel et image)
+                    enriched_results = []
+                    for anime in results:
+                        name = anime.get("name")
+                        if name:
+                            try:
+                                info = extract_anime_info(name)
+                                if info:
+                                    anime["real_name"] = info.get("titreOeuvre", name)
+                                    anime["image"] = info.get("imgOeuvre", "")
+                                else:
+                                    anime["real_name"] = name
+                                    anime["image"] = ""
+                            except:
+                                anime["real_name"] = name
+                                anime["image"] = ""
+                        else:
+                            anime["real_name"] = "N/A"
+                            anime["image"] = ""
+                        
+                        # Déterminer le statut pour la couleur
+                        found = anime.get("found", False)
+                        anime_day = anime.get("anime_day")
+                        day_id = anime.get("day_id")
+                        episodes_complete = anime.get("episodes_complete")
+                        
+                        if not found:
+                            if episodes_complete is True:
+                                anime["status"] = "green"
+                            elif episodes_complete is False:
+                                anime["status"] = "yellow"
+                            else:
+                                anime["status"] = "red"
+                        elif anime_day == day_id:
+                            anime["status"] = "normal"
+                        else:
+                            anime["status"] = "normal"
+                        
+                        enriched_results.append(anime)
+                    
+                    # Sauvegarder les résultats
+                    data_path = database_path / "planning_scan_data.json"
+                    scan_data = {
+                        "results": enriched_results,
+                        "scan_date": datetime.now().isoformat(),
+                        "total": len(enriched_results)
+                    }
+                    with open(data_path, 'w', encoding='utf-8') as f:
+                        json.dump(scan_data, f, indent=2, ensure_ascii=False)
+                    
+                    # Marquer le scan comme terminé
+                    current_status = get_planning_scan_status()
+                    set_planning_scan_status(
+                        "completed",
+                        started_at=current_status.get("started_at"),
+                        completed_at=datetime.now().isoformat()
+                    )
+                except Exception as e:
+                    current_status = get_planning_scan_status()
+                    set_planning_scan_status(
+                        "error",
+                        started_at=current_status.get("started_at"),
+                        error=str(e)
+                    )
+            
+            # Démarrer le thread
+            scan_thread = threading.Thread(target=run_scan, daemon=True)
+            scan_thread.start()
+            
+            return jsonify({"status": "started", "message": "Scan du planning démarré"})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     return local_bp
 

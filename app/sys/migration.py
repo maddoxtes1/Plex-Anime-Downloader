@@ -97,6 +97,68 @@ _MIGRATIONS = {
                 "default_value": "https://anime-sama.tv"
             }
         ]
+    },
+    "Beta-0.7.0": {
+        "description": "Migration vers Beta-0.7.0 - Ajout de plex_path.json",
+        "changes": [
+            {
+                "type": "create_file",
+                "description": "Créer le fichier planning_scan_data.json",
+                "target": {
+                    "file": ";datapath;/database/planning_scan_data.json",
+                    "type": "json",
+                    "default_content": "planning_scan_data.json"
+                },
+            },
+            {
+                "type": "add_section",
+                "description": "Ajout de la section anime_sama de config.conf",
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "anime_sama"
+                }
+            },
+            {
+                "type": "add_key",
+                "description": "Ajout de base_url dans la section anime_sama de config.conf",
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "anime_sama",
+                    "key": "base_url"
+                },
+                "default_value": "https://anime-sama.tv"
+            },
+            {
+                "type": "add_key",
+                "description": "Ajout de auto_planning dans la section anime_sama de config.conf",
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "anime_sama",
+                    "key": "auto_planning"
+                },
+                "default_value": "True"
+            },
+            {
+                "type": "move_value",
+                "description": "Déplacer as_Baseurl de la section scan-option vers la section anime_sama de config.conf",
+                "source": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "scan-option",
+                    "key": "as_Baseurl"
+                },
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "anime_sama",
+                    "key": "base_url"
+                },
+                "remove_from_source": True
+            }
+        ]
     }
 }
 

@@ -3,10 +3,38 @@ import pytz
 from datetime import datetime
 import json
 import re
+import threading
 from configparser import ConfigParser
 
 from ..sys import FolderConfig, EnvConfig, universal_logger
 from .function import anime_sama #, franime
+
+# Variable globale pour tracker le statut du scan du planning
+_planning_scan_status = {
+    "status": "idle",
+    "started_at": None,
+    "completed_at": None,
+    "error": None
+}
+
+def get_planning_scan_status():
+    """Retourne le statut actuel du scan du planning"""
+    return _planning_scan_status.copy()
+
+def set_planning_scan_status(status, started_at=None, completed_at=None, error=None):
+    """Met à jour le statut du scan du planning"""
+    global _planning_scan_status
+    _planning_scan_status["status"] = status
+    if started_at:
+        _planning_scan_status["started_at"] = started_at
+    if completed_at:
+        _planning_scan_status["completed_at"] = completed_at
+    if error:
+        _planning_scan_status["error"] = error
+    if status == "idle":
+        _planning_scan_status["started_at"] = None
+        _planning_scan_status["completed_at"] = None
+        _planning_scan_status["error"] = None
 
 class streaming_manager:
     def __init__(self, queue):
@@ -21,10 +49,15 @@ class streaming_manager:
 
         self.anime_sama = config.get("scan-option", "anime-sama", fallback="True").lower() == "true"
         self.franime = config.get("scan-option", "franime", fallback="False").lower() == "true"
-        self.as_baseurl = config.get("scan-option", "as_Baseurl", fallback="https://anime-sama.tv")
+        self.as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
         
         self.seconds = int(config.get("settings", "timer", fallback="3600"))
         self.logger = universal_logger("System", "sys.log")
+        
+        # Chemin pour stocker les résultats du planning
+        database_path = FolderConfig.find_path(folder_name="database")
+        self.planning_data_path = database_path / "planning_scan_data.json"
+        
         self.run()
     
 
@@ -114,11 +147,17 @@ class streaming_manager:
             return []
 
     def run(self):
+        # Lancer un scan du planning au démarrage (synchrone, le code attend la fin)
+        self._run_planning_scan()
+        
         while True:
             self.france_time = self.get_france_time()
 
             anime_sama_list, franime_list = self.get_anime()
             franime_list = False # remove this line when franime is ready
+
+            # Lancer un scan du planning au début de chaque cycle (synchrone, le code attend la fin)
+            self._run_planning_scan()
 
             if self.anime_sama == True:
                 self.logger.info(msg="Anime-Sama scan started")
@@ -175,6 +214,97 @@ class streaming_manager:
                         for episode_name, path, episode_url in queue:
                             self.queue.add_to_queue(episode_name=episode_name, path=path, episode_urls=episode_url)
             self.timer(seconds=self.seconds)
+    
+    def _run_planning_scan(self):
+        """Lance un scan du planning et sauvegarde les résultats"""
+        try:
+            # Vérifier si un scan est déjà en cours
+            current_status = get_planning_scan_status()
+            if current_status.get("status") == "running":
+                self.logger.debug("Un scan du planning est déjà en cours, on skip")
+                return
+            
+            # Marquer le scan comme en cours
+            set_planning_scan_status("running", started_at=datetime.now().isoformat())
+            
+            from .function.anime_sama import anime_sama_planning
+            from .api.anime_sama_api import extract_anime_info
+            
+            self.logger.info("Démarrage du scan du planning...")
+            planning = anime_sama_planning()
+            results = planning.run()
+            
+            # Enrichir les résultats avec les infos (nom réel et image)
+            enriched_results = []
+            for anime in results:
+                name = anime.get("name")
+                if name:
+                    try:
+                        info = extract_anime_info(name)
+                        if info:
+                            anime["real_name"] = info.get("titreOeuvre", name)
+                            anime["image"] = info.get("imgOeuvre", "")
+                        else:
+                            anime["real_name"] = name
+                            anime["image"] = ""
+                    except:
+                        anime["real_name"] = name
+                        anime["image"] = ""
+                else:
+                    anime["real_name"] = "N/A"
+                    anime["image"] = ""
+                
+                # Déterminer le statut pour la couleur
+                found = anime.get("found", False)
+                anime_day = anime.get("anime_day")
+                day_id = anime.get("day_id")
+                episodes_complete = anime.get("episodes_complete")
+                status = anime.get("status")  # Pour single_download, le status est déjà défini
+                
+                # Si le status est déjà défini (pour single_download), on l'utilise
+                if status and status in ["green", "yellow", "red"]:
+                    anime["status"] = status
+                elif not found:
+                    if episodes_complete is True:
+                        anime["status"] = "green"
+                    elif episodes_complete is False:
+                        anime["status"] = "yellow"
+                    else:
+                        anime["status"] = "red"
+                elif anime_day == day_id:
+                    anime["status"] = "normal"
+                else:
+                    anime["status"] = "normal"
+                
+                enriched_results.append(anime)
+            
+            # Sauvegarder les résultats
+            scan_data = {
+                "results": enriched_results,
+                "scan_date": datetime.now().isoformat(),
+                "total": len(enriched_results)
+            }
+            with open(self.planning_data_path, 'w', encoding='utf-8') as f:
+                json.dump(scan_data, f, indent=2, ensure_ascii=False)
+            
+            # Marquer le scan comme terminé
+            current_status = get_planning_scan_status()
+            set_planning_scan_status(
+                "completed",
+                started_at=current_status.get("started_at"),
+                completed_at=datetime.now().isoformat()
+            )
+            
+            self.logger.info(f"Scan du planning terminé: {len(enriched_results)} animes traités")
+        except Exception as e:
+            self.logger.error(f"Erreur lors du scan du planning: {e}")
+            # Marquer le scan comme erreur
+            current_status = get_planning_scan_status()
+            set_planning_scan_status(
+                "error",
+                started_at=current_status.get("started_at"),
+                error=str(e)
+            )
         """    if FR_Anime == True:
                 self.logger.info(msg="FRAnime scan started")
                 log = universal_logger(name="FRAnime", log_file="franime.log")

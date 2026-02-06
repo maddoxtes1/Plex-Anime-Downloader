@@ -1,0 +1,271 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Paramètres - Dashboard Plex-Anime-Downloader{% endblock %}
+
+{% block content %}
+<div class="tab-content">
+    <div class="card mt-4">
+        <h2 class="section-title">Utilisateurs enregistrés</h2>
+        <p class="sub">
+            Comptes utilisés par l'extension (base SQLite locale).
+        </p>
+
+        {% if users %}
+            <table class="mb-3">
+                <thead>
+                    <tr>
+                        <th>Nom d'utilisateur</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                        <tr>
+                            <td>{{ u["username"] }}</td>
+                            <td>
+                                <form class="inline" method="post" action="{{ url_for('local.local_delete_user') }}">
+                                    <input type="hidden" name="username" value="{{ u['username'] }}">
+                                    <button class="btn danger" type="submit">Supprimer</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="empty mb-3">
+                Aucun utilisateur pour le moment. Crée des comptes via l'extension
+                ou ici depuis l'interface admin.
+            </div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('local.local_create_user') }}" class="mt-2">
+            <label class="small">Ajouter un utilisateur :</label><br>
+            <input class="medium" type="text" name="username" placeholder="username" required>
+            <input class="medium" type="password" name="password" placeholder="mot de passe" required>
+            <button class="btn primary" type="submit">Créer</button>
+        </form>
+    </div>
+
+    <div class="card mt-4">
+        <h2 class="section-title">Thème de l'interface</h2>
+        <p class="sub">
+            Choisissez le thème visuel pour le dashboard et l'extension.
+        </p>
+        <form method="post" action="{{ url_for('local.local_update_theme') }}">
+            <div class="mb-2">
+                <label class="small" for="theme">Thème actuel :</label>
+                <select name="theme" id="theme" style="width: 200px;">
+                    {% for theme_key, theme_name in available_themes.items() %}
+                        <option value="{{ theme_key }}" {% if theme_key == current_theme %}selected{% endif %}>
+                            {{ theme_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="btn primary" type="submit">Changer le thème</button>
+        </form>
+    </div>
+
+    <div class="card mt-4">
+        <h2 class="section-title">Configuration Docker (config.conf)</h2>
+        <p class="sub">
+            Fichier : <code>{{ CONFIG_PATH if CONFIG_PATH is defined else 'config.conf' }}</code>.
+            Contrôle des threads, timer et options de scan.
+        </p>
+
+        <form method="post" action="{{ url_for('local.local_update_config') }}">
+            <!-- Section principale -->
+            <div class="mb-2">
+                <label class="small" for="threads">Threads</label>
+                <input class="short" type="number" id="threads" name="threads" min="1" value="{{ config.threads }}">
+                <p class="sub" style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">
+                    Nombre de threads utilisés pour le traitement parallèle des téléchargements
+                </p>
+            </div>
+            <div class="mb-2">
+                <label class="small" for="timer">Timer (secondes)</label>
+                <input class="short" type="number" id="timer" name="timer" min="1" value="{{ config.timer }}">
+                <p class="sub" style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">
+                    Intervalle en secondes entre chaque scan automatique des animes
+                </p>
+            </div>
+            <div class="mb-2">
+                <label class="small">
+                    <input type="checkbox" name="news" {% if config.get('news', True) %}checked{% endif %}>
+                    Activer les actualités
+                </label>
+                <p class="sub" style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">
+                    Ping automatique vers le serveur pour récupérer les actualités
+                </p>
+            </div>
+            <div class="mb-3">
+                <label class="small" for="log_level">Niveau de log</label>
+                <select id="log_level" name="log_level" class="medium">
+                    <option value="DEBUG" {% if config.get('log_level', 'INFO') == 'DEBUG' %}selected{% endif %}>DEBUG</option>
+                    <option value="INFO" {% if config.get('log_level', 'INFO') == 'INFO' %}selected{% endif %}>INFO</option>
+                    <option value="WARNING" {% if config.get('log_level', 'INFO') == 'WARNING' %}selected{% endif %}>WARNING</option>
+                    <option value="ERROR" {% if config.get('log_level', 'INFO') == 'ERROR' %}selected{% endif %}>ERROR</option>
+                    <option value="CRITICAL" {% if config.get('log_level', 'INFO') == 'CRITICAL' %}selected{% endif %}>CRITICAL</option>
+                </select>
+                <p class="sub" style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">
+                    Niveau de détail des logs (DEBUG = très détaillé, CRITICAL = erreurs critiques uniquement)
+                </p>
+            </div>
+            
+            <!-- Séparation visuelle -->
+            <hr style="margin: 1.5em 0; border: none; border-top: 1px solid #ddd; opacity: 0.5;">
+            
+            <!-- Section scan -->
+            <div class="mb-2">
+                <label class="small">
+                    <input type="checkbox" name="anime_sama" {% if config.anime_sama %}checked{% endif %}>
+                    Activer scan anime-sama
+                </label>
+                <p class="sub" style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">
+                    Active le scan automatique des animes depuis le site anime-sama
+                </p>
+            </div>
+            <div class="mb-2">
+                <label class="small" for="as_Baseurl">URL de base anime-sama</label>
+                <input class="medium" type="text" id="as_Baseurl" name="as_Baseurl" 
+                       placeholder="https://anime-sama.tv" 
+                       value="{{ config.get('as_Baseurl', 'https://anime-sama.tv') }}"
+                       style="width: 100%; max-width: 400px;">
+                <p class="sub" style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">
+                    URL de base du site anime-sama (ex: https://anime-sama.tv ou https://anime-sama.eu)
+                </p>
+            </div>
+            <div class="mb-2">
+                <label class="small">
+                    <input type="checkbox" name="auto_planning" {% if config.get('auto_planning', True) %}checked{% endif %}>
+                    Auto-planning
+                </label>
+                <p class="sub" style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">
+                    Supprime automatiquement les animes qui ne sont plus dans le planning d'anime-sama pour faire moins de requêtes
+                </p>
+            </div>
+            <div class="mb-3">
+                <label class="small">
+                    <input type="checkbox" name="franime" {% if config.franime %}checked{% endif %}>
+                    Activer scan franime
+                </label>
+                <p class="sub" style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">
+                    Active le scan depuis franime (en développement, ne fonctionne pas à cause de la protection antibot)
+                </p>
+            </div>
+            
+            <button class="btn primary" type="submit">Sauvegarder config.conf</button>
+        </form>
+    </div>
+
+    <div class="card mt-4">
+        <h2 class="section-title">Extension Chrome</h2>
+        <p class="sub">
+            Téléchargez l'extension Chrome pour ajouter des animes à la liste de téléchargement depuis anime-sama.eu.
+        </p>
+        <div class="mt-2">
+            <a href="{{ url_for('local.local_download_extension') }}" class="btn primary" style="text-decoration: none; display: inline-block;">
+                Télécharger l'extension (.zip)
+            </a>
+        </div>
+        <p class="sub mt-2" style="font-size: 0.75rem; color: #6b7280;">
+            Instructions : Décompressez le fichier ZIP, allez dans Chrome → Extensions → Mode développeur → Charger l'extension non empaquetée, puis sélectionnez le dossier décompressé.
+        </p>
+    </div>
+
+    <div class="card mt-4">
+        <h2 class="section-title">Chemins Plex (plex_path.json)</h2>
+        <p class="sub">
+            Racine Plex : <code>{{ plex_root }}</code><br>
+            Chaque entrée correspond à un dossier (path) dans Plex, avec une ou plusieurs langues.<br>
+            Vous pouvez modifier le langage des dossiers, mais un langage ne peut exister que dans un seul dossier.
+            voici les langues disponible: vostfr, va, vf, vkr, vcn, vqc, vf1, vf2, vj.
+        </p>
+
+        {% if plex_entries %}
+            <table class="mb-3">
+                <thead>
+                    <tr>
+                        <th>Path</th>
+                        <th>Langues</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in plex_entries %}
+                        <tr>
+                            <td>
+                                <form class="inline" method="post" action="{{ url_for('local.local_plex_update') }}">
+                                    <input type="hidden" name="old_path" value="{{ e.path }}">
+                                    <input class="medium" type="text" name="path" value="{{ e.path }}">
+                            </td>
+                            <td>
+                                    <input class="medium" type="text" name="languages" value="{{ e.language|join(', ') }}">
+                            </td>
+                            <td>
+                                    <button class="btn" type="submit">Mettre à jour</button>
+                                </form>
+                                <form class="inline plex-delete-form" method="post" action="{{ url_for('local.local_plex_delete') }}" onsubmit="return confirmDeletePlexPath(event, '{{ e.path }}')">
+                                    <input type="hidden" name="path" value="{{ e.path }}">
+                                    <button class="btn danger" type="submit">Supprimer</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="empty mb-3">
+                Aucun chemin configuré pour l'instant.
+            </div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('local.local_plex_add') }}" class="mt-2">
+            <label class="small">Ajouter / mettre à jour un chemin :</label><br>
+            <input class="medium" type="text" name="path" placeholder="ex: anime_vf" required>
+            <input class="medium" type="text" name="languages" placeholder="ex: vf, vj">
+            <button class="btn primary" type="submit">Enregistrer</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+        // Gestion de la modale de confirmation pour suppression de chemin Plex
+        let pendingDeleteForm = null;
+        
+        function confirmDeletePlexPath(event, pathName) {
+            event.preventDefault();
+            // Récupérer le formulaire parent (event.target est le bouton, event.currentTarget est le formulaire)
+            pendingDeleteForm = event.currentTarget || event.target.closest('form');
+            
+            // Afficher le nom du dossier dans la modale
+            document.getElementById('delete-path-name').textContent = pathName;
+            
+            // Afficher la modale
+            document.getElementById('delete-confirm-modal').classList.add('show');
+            
+            // Gérer le clic sur le bouton de confirmation
+            const confirmBtn = document.getElementById('confirm-delete-btn');
+            confirmBtn.onclick = function() {
+                if (pendingDeleteForm) {
+                    pendingDeleteForm.submit();
+                }
+            };
+            
+            return false;
+        }
+        
+        // Fermer la modale avec la touche Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('delete-confirm-modal');
+                if (modal && modal.classList.contains('show')) {
+                    modal.classList.remove('show');
+                    pendingDeleteForm = null;
+                }
+            }
+        });
+{% endblock %}
+

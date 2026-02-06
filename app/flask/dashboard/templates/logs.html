@@ -1,0 +1,258 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Logs - Dashboard Plex-Anime-Downloader{% endblock %}
+
+{% block extra_styles %}
+        .log-selector {
+            margin-bottom: 16px;
+        }
+        
+        .log-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        
+        .log-auto-scroll {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .log-viewer {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 16px;
+            max-height: 600px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        
+        .log-content-pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: rgba(255, 255, 255, 0.9);
+        }
+{% endblock %}
+
+{% block content %}
+<div class="tab-content">
+    <div class="card mt-4">
+        <h2 class="section-title">Fichiers de logs</h2>
+        <p class="sub">
+            Consultez les logs de l'application et du conteneur Docker en temps réel.
+        </p>
+
+        <div class="log-selector">
+            <label class="small" for="log-file-select">Sélectionner un fichier de log :</label>
+            <select id="log-file-select" class="medium" style="width: 100%; max-width: 300px;" onchange="onLogFileChange()">
+                <option value="">-- Choisir un fichier --</option>
+                <option value="__docker__">🐳 Docker logs (temps réel)</option>
+                {% if log_files %}
+                    {% for log_file in log_files %}
+                        <option value="{{ log_file.name }}" data-size="{{ log_file.size_mb }}">
+                            {{ log_file.name }} ({{ log_file.size_mb }} MB)
+                        </option>
+                    {% endfor %}
+                {% endif %}
+            </select>
+        </div>
+
+        <div class="log-controls">
+            <button class="btn primary" onclick="loadLogFile()" id="btn-load-log">Charger le fichier</button>
+            <button class="btn primary" onclick="startDockerLogs()" id="btn-start-stream" style="display: none;">Démarrer le streaming</button>
+            <button class="btn danger" onclick="stopDockerLogs()" id="btn-stop-stream" style="display: none;">Arrêter le streaming</button>
+            <button class="btn" onclick="clearLogViewer()">Effacer</button>
+            <div class="log-auto-scroll">
+                <input type="checkbox" id="auto-scroll" checked>
+                <label class="small" for="auto-scroll">Défilement automatique</label>
+            </div>
+        </div>
+
+        <div id="log-viewer" class="log-viewer" style="display: none;">
+            <pre id="log-content" class="log-content-pre"></pre>
+        </div>
+
+        <div id="log-stream-viewer" class="log-viewer" style="display: none; margin-top: 12px;">
+            <pre id="log-stream-content" class="log-content-pre"></pre>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+        let logEventSource = null;
+
+        function onLogFileChange() {
+            const select = document.getElementById('log-file-select');
+            const value = select.value;
+            const btnLoad = document.getElementById('btn-load-log');
+            const btnStart = document.getElementById('btn-start-stream');
+            const btnStop = document.getElementById('btn-stop-stream');
+            
+            if (value === '__docker__') {
+                btnLoad.style.display = 'none';
+                btnStart.style.display = 'inline-block';
+                btnStop.style.display = 'none';
+            } else if (value) {
+                btnLoad.style.display = 'inline-block';
+                btnStart.style.display = 'none';
+                btnStop.style.display = 'none';
+            } else {
+                btnLoad.style.display = 'inline-block';
+                btnStart.style.display = 'none';
+                btnStop.style.display = 'none';
+            }
+        }
+
+        function loadLogFile() {
+            const select = document.getElementById('log-file-select');
+            const filename = select.value;
+            
+            if (!filename || filename === '__docker__') {
+                alert('Veuillez sélectionner un fichier de log');
+                return;
+            }
+            
+            // Arrêter le streaming si actif
+            if (logEventSource) {
+                logEventSource.close();
+                logEventSource = null;
+            }
+            document.getElementById('log-stream-viewer').style.display = 'none';
+            
+            const viewer = document.getElementById('log-viewer');
+            const content = document.getElementById('log-content');
+            
+            viewer.style.display = 'block';
+            content.textContent = 'Chargement...';
+            
+            fetch(`/local/logs/view/${encodeURIComponent(filename)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.ok) {
+                        // Formater le contenu pour préserver les sauts de ligne
+                        const lines = data.content.split('\n');
+                        content.textContent = lines.join('\n');
+                        if (document.getElementById('auto-scroll').checked) {
+                            setTimeout(() => {
+                                viewer.scrollTop = viewer.scrollHeight;
+                            }, 100);
+                        }
+                    } else {
+                        content.textContent = 'Erreur: ' + data.error;
+                    }
+                })
+                .catch(error => {
+                    content.textContent = 'Erreur lors du chargement: ' + error;
+                });
+        }
+
+        function clearLogViewer() {
+            document.getElementById('log-content').textContent = '';
+            document.getElementById('log-viewer').style.display = 'none';
+            document.getElementById('log-stream-content').textContent = '';
+            document.getElementById('log-stream-viewer').style.display = 'none';
+            if (logEventSource) {
+                logEventSource.close();
+                logEventSource = null;
+            }
+            document.getElementById('btn-stop-stream').style.display = 'none';
+            document.getElementById('btn-start-stream').style.display = 'none';
+        }
+
+        function startDockerLogs() {
+            const select = document.getElementById('log-file-select');
+            const value = select.value;
+            
+            if (!value) {
+                alert('Veuillez sélectionner une source de logs');
+                return;
+            }
+            
+            // Masquer le viewer statique
+            document.getElementById('log-viewer').style.display = 'none';
+            
+            // Arrêter le streaming précédent si actif
+            if (logEventSource) {
+                logEventSource.close();
+            }
+            
+            const streamViewer = document.getElementById('log-stream-viewer');
+            const streamContent = document.getElementById('log-stream-content');
+            const btnStart = document.getElementById('btn-start-stream');
+            const btnStop = document.getElementById('btn-stop-stream');
+            
+            streamViewer.style.display = 'block';
+            streamContent.textContent = '';
+            btnStart.style.display = 'none';
+            btnStop.style.display = 'inline-block';
+            
+            // Déterminer l'URL du streaming
+            let streamUrl;
+            if (value === '__docker__') {
+                streamUrl = '/local/logs/stream/docker';
+            } else {
+                streamUrl = `/local/logs/stream/${encodeURIComponent(value)}`;
+            }
+            
+            logEventSource = new EventSource(streamUrl);
+            
+            logEventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.content) {
+                        streamContent.textContent += data.content;
+                        if (document.getElementById('auto-scroll').checked) {
+                            setTimeout(() => {
+                                streamViewer.scrollTop = streamViewer.scrollHeight;
+                            }, 50);
+                        }
+                    } else if (data.error) {
+                        streamContent.textContent += '\n[Erreur] ' + data.error;
+                    }
+                } catch (e) {
+                    console.error('Erreur parsing SSE:', e);
+                }
+            };
+            
+            logEventSource.onerror = function(error) {
+                console.error('Erreur SSE:', error);
+                if (logEventSource.readyState === EventSource.CLOSED) {
+                    streamContent.textContent += '\n[Connexion fermée]';
+                    btnStart.style.display = 'inline-block';
+                    btnStop.style.display = 'none';
+                }
+            };
+        }
+
+        function stopDockerLogs() {
+            if (logEventSource) {
+                logEventSource.close();
+                logEventSource = null;
+            }
+            document.getElementById('log-stream-viewer').style.display = 'none';
+            document.getElementById('btn-start-stream').style.display = 'inline-block';
+            document.getElementById('btn-stop-stream').style.display = 'none';
+        }
+
+        // Auto-scroll pour le viewer de logs
+        document.addEventListener('DOMContentLoaded', function() {
+            const logViewer = document.getElementById('log-viewer');
+            if (logViewer) {
+                logViewer.addEventListener('scroll', function() {
+                    const autoScroll = document.getElementById('auto-scroll');
+                    if (autoScroll && this.scrollTop + this.clientHeight < this.scrollHeight - 10) {
+                        autoScroll.checked = false;
+                    }
+                });
+            }
+        });
+{% endblock %}
+

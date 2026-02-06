@@ -1,0 +1,1059 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Planning - Dashboard Plex-Anime-Downloader{% endblock %}
+
+{% block extra_styles %}
+        /* Styles pour les cartes du planning */
+        .planning-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 8px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+        
+        .planning-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+        }
+        
+        .planning-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: transparent;
+        }
+        
+        .planning-card.status-normal::before {
+            background: transparent;
+        }
+        
+        .planning-card.status-green::before {
+            background: #10b981;
+        }
+        
+        .planning-card.status-yellow::before {
+            background: #f59e0b;
+        }
+        
+        .planning-card.status-red::before {
+            background: #ef4444;
+        }
+        
+        .planning-card-image {
+            width: 100%;
+            aspect-ratio: 2/3;
+            object-fit: cover;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        
+        .planning-card-title {
+            font-weight: 600;
+            font-size: 0.8rem;
+            margin-bottom: 4px;
+            line-height: 1.2;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .planning-card-lang {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 2px;
+        }
+        
+        /* Responsive pour petits écrans */
+        @media (max-width: 1200px) {
+            .planning-card {
+                padding: 6px;
+            }
+            .planning-card-title {
+                font-size: 0.75rem;
+            }
+            .planning-card-lang {
+                font-size: 0.65rem;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .planning-card {
+                padding: 5px;
+            }
+            .planning-card-title {
+                font-size: 0.7rem;
+            }
+            .planning-card-lang {
+                font-size: 0.6rem;
+            }
+        }
+        
+        @keyframes loading-pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+        
+        /* Style pour la scrollbar du slider single_download */
+        #planning-cards-container div[style*="overflow-x: auto"]::-webkit-scrollbar {
+            height: 8px;
+        }
+        
+        #planning-cards-container div[style*="overflow-x: auto"]::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+        }
+        
+        #planning-cards-container div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+        
+        #planning-cards-container div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Modal pour les détails d'anime */
+        .anime-details-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            z-index: 10002;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .anime-details-modal.show {
+            display: flex;
+        }
+        
+        .anime-details-content {
+            background: {{ theme_colors.bg_card }};
+            border: 1px solid {{ theme_colors.border }};
+            border-radius: 12px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.3s ease-out;
+        }
+        
+        .anime-details-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px;
+            border-bottom: 1px solid {{ theme_colors.border }};
+        }
+        
+        .anime-details-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: {{ theme_colors.text_primary }};
+        }
+        
+        .anime-details-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: {{ theme_colors.text_secondary }};
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+        
+        .anime-details-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .anime-details-body {
+            padding: 20px;
+        }
+        
+        .anime-details-image {
+            width: 200px;
+            height: 300px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            float: left;
+            margin-right: 20px;
+        }
+        
+        .anime-details-info {
+            margin-bottom: 20px;
+        }
+        
+        .anime-details-info-item {
+            margin-bottom: 12px;
+        }
+        
+        .anime-details-info-label {
+            font-weight: 600;
+            color: {{ theme_colors.text_primary }};
+            margin-right: 8px;
+        }
+        
+        .anime-details-info-value {
+            color: {{ theme_colors.text_secondary }};
+        }
+        
+        .anime-details-description {
+            clear: both;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            line-height: 1.6;
+            color: {{ theme_colors.text_secondary }};
+        }
+        
+        .anime-details-seasons {
+            margin-top: 20px;
+        }
+        
+        .anime-details-seasons-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        .anime-details-season-badge {
+            padding: 6px 12px;
+            background: rgba(102, 126, 234, 0.2);
+            border: 1px solid rgba(102, 126, 234, 0.4);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: {{ theme_colors.text_primary }};
+        }
+        
+        .anime-details-footer {
+            padding: 20px;
+            border-top: 1px solid {{ theme_colors.border }};
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .anime-details-footer-left {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .anime-details-footer-right {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .anime-details-loading {
+            text-align: center;
+            padding: 40px;
+            color: {{ theme_colors.text_secondary }};
+        }
+        
+        .anime-details-error {
+            padding: 20px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            color: #dc2626;
+            margin: 20px;
+        }
+{% endblock %}
+
+{% block content %}
+<div class="tab-content">
+    <div class="card mt-4">
+        <h2 class="section-title">Scan du Planning</h2>
+        <p class="sub">
+            Vérifiez le statut de vos animes dans le planning d'anime-sama et leur état d'installation.
+        </p>
+        
+        <div style="margin-bottom: 20px;">
+            <button class="btn primary" onclick="startPlanningScan()" id="btn-start-scan">🔍 Lancer le scan</button>
+            <button class="btn" onclick="refreshPlanningResults()" id="btn-refresh-results" style="display: none;">🔄 Actualiser</button>
+        </div>
+        
+        <!-- Écran de chargement -->
+        <div id="planning-loading" style="display: none; text-align: center; padding: 40px;">
+            <div style="font-size: 48px; margin-bottom: 20px;">⏳</div>
+            <p style="font-size: 18px; margin-bottom: 10px;">Scan du planning en cours...</p>
+            <p class="sub" id="planning-loading-message">Veuillez patienter, cela peut prendre quelques instants.</p>
+            <div style="margin-top: 20px;">
+                <div style="width: 100%; max-width: 400px; height: 4px; background: rgba(0,0,0,0.1); border-radius: 2px; margin: 0 auto; overflow: hidden;">
+                    <div id="planning-progress-bar" style="height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); width: 0%; transition: width 0.3s; animation: loading-pulse 1.5s ease-in-out infinite;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Résultats -->
+        <div id="planning-results" style="display: none;">
+            <div id="planning-stats" style="margin-bottom: 20px; padding: 15px; background: rgba(0,0,0,0.05); border-radius: 8px;">
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <div><strong>Total:</strong> <span id="stat-total">0</span></div>
+                    <div><strong>✅ Correct:</strong> <span id="stat-normal">0</span></div>
+                    <div><strong>🟢 Complets:</strong> <span id="stat-green">0</span></div>
+                    <div><strong>🟡 Incomplets:</strong> <span id="stat-yellow">0</span></div>
+                    <div><strong>🔴 Non trouvés:</strong> <span id="stat-red">0</span></div>
+                </div>
+            </div>
+            
+            <div id="planning-cards-container">
+                <!-- Les cartes seront générées ici par JavaScript, groupées par jour -->
+            </div>
+        </div>
+        
+        <!-- Message d'erreur -->
+        <div id="planning-error" style="display: none; padding: 20px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; color: #dc2626;">
+            <strong>Erreur:</strong> <span id="planning-error-message"></span>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour les détails d'anime -->
+<div class="anime-details-modal" id="anime-details-modal">
+    <div class="anime-details-content">
+        <div class="anime-details-header">
+            <h3 id="anime-details-title">Détails de l'anime</h3>
+            <button class="anime-details-close" onclick="closeAnimeDetails()">×</button>
+        </div>
+        <div class="anime-details-body" id="anime-details-body">
+            <div class="anime-details-loading">Chargement des détails...</div>
+        </div>
+        <div class="anime-details-footer" id="anime-details-footer" style="display: none;">
+            <div class="anime-details-footer-left">
+                <button class="btn primary" onclick="openAnimeSamaPage()" id="anime-open-btn">🌐 Ouvrir sur Anime-Sama</button>
+            </div>
+            <div class="anime-details-footer-right">
+                <button class="btn danger" onclick="deleteAnime()" id="anime-delete-btn">🗑️ Supprimer l'anime</button>
+                <button class="btn" onclick="closeAnimeDetails()">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+        // Charger les données du planning au chargement de la page
+        document.addEventListener('DOMContentLoaded', function() {
+            checkPlanningStatusOnLoad();
+        });
+        
+        function checkPlanningStatusOnLoad() {
+            // Toujours charger les données d'abord (anciennes données)
+            loadPlanningData();
+            
+            // Ensuite vérifier le statut du scan
+            fetch('/local/planning/status')
+                .then(response => response.json())
+                .then(statusData => {
+                    const btnStart = document.getElementById('btn-start-scan');
+                    const loadingDiv = document.getElementById('planning-loading');
+                    const resultsDiv = document.getElementById('planning-results');
+                    
+                    if (statusData.status === 'running') {
+                        // Un scan est en cours
+                        btnStart.disabled = true;
+                        btnStart.textContent = '⏳ Scan en cours...';
+                        
+                        // Afficher un message dans les résultats pour indiquer qu'un scan est en cours
+                        const statsDiv = document.getElementById('planning-stats');
+                        if (statsDiv) {
+                            const scanMessage = document.createElement('div');
+                            scanMessage.id = 'scan-in-progress-message';
+                            scanMessage.style.cssText = 'padding: 12px; background: rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.3); border-radius: 6px; margin-bottom: 15px; color: rgba(255, 255, 255, 0.9); text-align: center;';
+                            scanMessage.innerHTML = '<strong>⏳ Un scan est en cours...</strong> Les données affichées sont celles du dernier scan. Elles seront mises à jour automatiquement à la fin du scan.';
+                            
+                            // Insérer le message au début des stats
+                            if (!document.getElementById('scan-in-progress-message')) {
+                                statsDiv.insertBefore(scanMessage, statsDiv.firstChild);
+                            }
+                        }
+                        
+                        // Masquer l'écran de chargement (on affiche les anciennes données)
+                        loadingDiv.style.display = 'none';
+                        resultsDiv.style.display = 'block';
+                        
+                        // Démarrer le polling pour mettre à jour quand le scan se termine
+                        planningScanAttempts = 0;
+                        checkPlanningStatus();
+                        planningScanInterval = setInterval(checkPlanningStatus, 2000);
+                    } else {
+                        // Pas de scan en cours, le bouton reste actif
+                        btnStart.disabled = false;
+                        btnStart.textContent = '🔍 Lancer le scan';
+                        
+                        // Supprimer le message de scan en cours s'il existe
+                        const scanMessage = document.getElementById('scan-in-progress-message');
+                        if (scanMessage) {
+                            scanMessage.remove();
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur lors de la vérification du statut:', error);
+                    // En cas d'erreur, le bouton reste actif
+                    const btnStart = document.getElementById('btn-start-scan');
+                    if (btnStart) {
+                        btnStart.disabled = false;
+                        btnStart.textContent = '🔍 Lancer le scan';
+                    }
+                });
+        }
+        
+        // Gestion du scan du planning
+        let planningScanInterval = null;
+        let planningScanTimeout = null;
+        let planningScanAttempts = 0;
+        const MAX_POLLING_ATTEMPTS = 300; // 10 minutes max (300 * 2 secondes)
+        
+        function startPlanningScan() {
+            const loadingDiv = document.getElementById('planning-loading');
+            const resultsDiv = document.getElementById('planning-results');
+            const errorDiv = document.getElementById('planning-error');
+            const btnStart = document.getElementById('btn-start-scan');
+            const btnRefresh = document.getElementById('btn-refresh-results');
+            
+            // Masquer les autres sections
+            resultsDiv.style.display = 'none';
+            errorDiv.style.display = 'none';
+            
+            // Afficher le chargement
+            loadingDiv.style.display = 'block';
+            btnStart.disabled = true;
+            btnStart.textContent = '⏳ Scan en cours...';
+            
+            // Réinitialiser les compteurs
+            planningScanAttempts = 0;
+            
+            // Lancer le scan
+            fetch('/local/planning/scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Erreur HTTP: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                console.log('Scan démarré:', data);
+                
+                // Démarrer le polling pour vérifier le statut (immédiatement puis toutes les 2 secondes)
+                checkPlanningStatus(); // Premier check immédiat
+                planningScanInterval = setInterval(checkPlanningStatus, 2000);
+            })
+            .catch(error => {
+                loadingDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                document.getElementById('planning-error-message').textContent = error.message;
+                btnStart.disabled = false;
+                btnStart.textContent = '🔍 Lancer le scan';
+            });
+        }
+        
+        function checkPlanningStatus() {
+            planningScanAttempts++;
+            
+            // Timeout de sécurité après 10 minutes
+            if (planningScanAttempts > MAX_POLLING_ATTEMPTS) {
+                clearInterval(planningScanInterval);
+                planningScanInterval = null;
+                const loadingDiv = document.getElementById('planning-loading');
+                const errorDiv = document.getElementById('planning-error');
+                loadingDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                document.getElementById('planning-error-message').textContent = 'Le scan prend trop de temps. Veuillez réessayer.';
+                const btnStart = document.getElementById('btn-start-scan');
+                btnStart.disabled = false;
+                btnStart.textContent = '🔍 Lancer le scan';
+                return;
+            }
+            
+            fetch('/local/planning/status')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erreur HTTP: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(statusData => {
+                    console.log('Statut du scan:', statusData.status);
+                    
+                    if (statusData.status === 'completed') {
+                        clearInterval(planningScanInterval);
+                        planningScanInterval = null;
+                        planningScanAttempts = 0;
+                        
+                        // Réactiver le bouton
+                        const btnStart = document.getElementById('btn-start-scan');
+                        if (btnStart) {
+                            btnStart.disabled = false;
+                            btnStart.textContent = '🔍 Lancer le scan';
+                        }
+                        
+                        // Supprimer le message de scan en cours
+                        const scanMessage = document.getElementById('scan-in-progress-message');
+                        if (scanMessage) {
+                            scanMessage.remove();
+                        }
+                        
+                        // Charger les nouvelles données
+                        loadPlanningData();
+                    } else if (statusData.status === 'error') {
+                        clearInterval(planningScanInterval);
+                        planningScanInterval = null;
+                        planningScanAttempts = 0;
+                        
+                        // Réactiver le bouton
+                        const btnStart = document.getElementById('btn-start-scan');
+                        if (btnStart) {
+                            btnStart.disabled = false;
+                            btnStart.textContent = '🔍 Lancer le scan';
+                        }
+                        
+                        // Supprimer le message de scan en cours
+                        const scanMessage = document.getElementById('scan-in-progress-message');
+                        if (scanMessage) {
+                            scanMessage.remove();
+                        }
+                        
+                        // Afficher l'erreur
+                        const errorDiv = document.getElementById('planning-error');
+                        if (errorDiv) {
+                            errorDiv.style.display = 'block';
+                            document.getElementById('planning-error-message').textContent = statusData.error || 'Erreur inconnue';
+                        }
+                    } else if (statusData.status === 'running') {
+                        // Le scan est toujours en cours, s'assurer que le message est affiché
+                        const statsDiv = document.getElementById('planning-stats');
+                        if (statsDiv && !document.getElementById('scan-in-progress-message')) {
+                            const scanMessage = document.createElement('div');
+                            scanMessage.id = 'scan-in-progress-message';
+                            scanMessage.style.cssText = 'padding: 12px; background: rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.3); border-radius: 6px; margin-bottom: 15px; color: rgba(255, 255, 255, 0.9); text-align: center;';
+                            scanMessage.innerHTML = '<strong>⏳ Un scan est en cours...</strong> Les données affichées sont celles du dernier scan. Elles seront mises à jour automatiquement à la fin du scan.';
+                            statsDiv.insertBefore(scanMessage, statsDiv.firstChild);
+                        }
+                        
+                        // Mettre à jour le texte du bouton avec le temps écoulé
+                        const btnStart = document.getElementById('btn-start-scan');
+                        if (btnStart) {
+                            btnStart.textContent = `⏳ Scan en cours... (${planningScanAttempts * 2}s)`;
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur lors de la vérification du statut:', error);
+                    // Ne pas arrêter le polling en cas d'erreur réseau, juste logger
+                });
+        }
+        
+        function loadPlanningData() {
+            fetch('/local/planning/data')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erreur HTTP: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    if (data.results && Array.isArray(data.results)) {
+                        displayPlanningResults(data.results);
+                    } else {
+                        // Si pas de résultats, ne pas afficher d'erreur si un scan est en cours
+                        const btnStart = document.getElementById('btn-start-scan');
+                        const isScanRunning = btnStart && btnStart.disabled;
+                        
+                        if (!isScanRunning) {
+                            throw new Error('Aucun résultat disponible');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur lors du chargement des données:', error);
+                    
+                    // Ne pas afficher l'erreur si un scan est en cours (on garde les anciennes données)
+                    const btnStart = document.getElementById('btn-start-scan');
+                    const isScanRunning = btnStart && btnStart.disabled;
+                    
+                    if (!isScanRunning) {
+                        const loadingDiv = document.getElementById('planning-loading');
+                        const errorDiv = document.getElementById('planning-error');
+                        if (loadingDiv) loadingDiv.style.display = 'none';
+                        if (errorDiv) {
+                            errorDiv.style.display = 'block';
+                            document.getElementById('planning-error-message').textContent = error.message;
+                        }
+                        if (btnStart) {
+                            btnStart.disabled = false;
+                            btnStart.textContent = '🔍 Lancer le scan';
+                        }
+                    }
+                });
+        }
+        
+        function displayPlanningResults(results) {
+            const loadingDiv = document.getElementById('planning-loading');
+            const resultsDiv = document.getElementById('planning-results');
+            const btnStart = document.getElementById('btn-start-scan');
+            const btnRefresh = document.getElementById('btn-refresh-results');
+            const container = document.getElementById('planning-cards-container');
+            
+            // Masquer le chargement
+            if (loadingDiv) loadingDiv.style.display = 'none';
+            
+            // Vérifier si un scan est en cours avant de réactiver le bouton
+            const isScanRunning = btnStart && btnStart.disabled && btnStart.textContent.includes('Scan en cours');
+            
+            // Réactiver le bouton seulement si aucun scan n'est en cours
+            if (!isScanRunning && btnStart) {
+                btnStart.disabled = false;
+                btnStart.textContent = '🔍 Lancer le scan';
+            }
+            
+            if (btnRefresh) btnRefresh.style.display = 'inline-block';
+            
+            // Calculer les statistiques
+            const stats = {
+                total: results.length,
+                normal: 0,
+                green: 0,
+                yellow: 0,
+                red: 0
+            };
+            
+            results.forEach(anime => {
+                if (anime.status === 'normal') stats.normal++;
+                else if (anime.status === 'green') stats.green++;
+                else if (anime.status === 'yellow') stats.yellow++;
+                else if (anime.status === 'red') stats.red++;
+            });
+            
+            // Afficher les statistiques
+            document.getElementById('stat-total').textContent = stats.total;
+            document.getElementById('stat-normal').textContent = stats.normal;
+            document.getElementById('stat-green').textContent = stats.green;
+            document.getElementById('stat-yellow').textContent = stats.yellow;
+            document.getElementById('stat-red').textContent = stats.red;
+            
+            // Trier et grouper les résultats par jour
+            const jours_mapping = {
+                "0": "Lundi",
+                "1": "Mardi",
+                "2": "Mercredi",
+                "3": "Jeudi",
+                "4": "Vendredi",
+                "5": "Samedi",
+                "6": "Dimanche",
+                "7": "No Day",
+                "8": "Single Download"
+            };
+            
+            // Séparer single_download des autres jours
+            const singleDownloadAnimes = [];
+            const groupedByDay = {};
+            
+            results.forEach(anime => {
+                const day = anime.anime_day || "7"; // Par défaut "No Day" si pas de jour
+                
+                // Séparer single_download (jour 8)
+                if (day === "8") {
+                    singleDownloadAnimes.push(anime);
+                } else {
+                    if (!groupedByDay[day]) {
+                        groupedByDay[day] = [];
+                    }
+                    groupedByDay[day].push(anime);
+                }
+            });
+            
+            // Générer les cartes groupées par jour
+            container.innerHTML = '';
+            
+            // Afficher single_download en premier (slider horizontal)
+            if (singleDownloadAnimes.length > 0) {
+                const singleDownloadSection = document.createElement('div');
+                singleDownloadSection.style.marginBottom = '30px';
+                singleDownloadSection.style.padding = '15px';
+                singleDownloadSection.style.backgroundColor = 'rgba(0, 0, 0, 0.1)';
+                singleDownloadSection.style.borderRadius = '8px';
+                
+                const singleDownloadTitle = document.createElement('h3');
+                singleDownloadTitle.textContent = `Single Download (${singleDownloadAnimes.length})`;
+                singleDownloadTitle.style.fontSize = '1.1rem';
+                singleDownloadTitle.style.marginBottom = '15px';
+                singleDownloadTitle.style.color = 'rgba(255, 255, 255, 0.9)';
+                singleDownloadTitle.style.textAlign = 'center';
+                singleDownloadSection.appendChild(singleDownloadTitle);
+                
+                // Conteneur slider horizontal pour les cartes single_download
+                const singleDownloadWrapper = document.createElement('div');
+                singleDownloadWrapper.style.position = 'relative';
+                singleDownloadWrapper.style.width = '100%';
+                
+                const singleDownloadContainer = document.createElement('div');
+                singleDownloadContainer.style.display = 'flex';
+                singleDownloadContainer.style.flexDirection = 'row';
+                singleDownloadContainer.style.gap = '15px';
+                singleDownloadContainer.style.overflowX = 'auto';
+                singleDownloadContainer.style.overflowY = 'hidden';
+                singleDownloadContainer.style.scrollBehavior = 'smooth';
+                singleDownloadContainer.style.paddingBottom = '10px';
+                singleDownloadContainer.style.scrollbarWidth = 'thin';
+                singleDownloadContainer.style.scrollbarColor = 'rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.1)';
+                
+                singleDownloadAnimes.forEach(anime => {
+                    const card = document.createElement('div');
+                    card.className = `planning-card status-${anime.status}`;
+                    card.style.minWidth = '150px';
+                    card.style.width = '150px';
+                    card.style.flexShrink = '0';
+                    card.style.flexGrow = '0';
+                    
+                    // Ajouter le gestionnaire de clic
+                    card.onclick = () => showAnimeDetails(anime);
+                    
+                    const langage = anime.langage || 'N/A';
+                    const season = anime.season ? `S${anime.season}` : '';
+                    const langageText = season ? `${langage} - ${season}` : langage;
+                    
+                    const image = anime.image ? `<img src="${anime.image}" alt="${anime.real_name}" class="planning-card-image" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\'%3E%3Crect fill=\'%23333\' width=\'200\' height=\'300\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' fill=\'%23999\' font-size=\'14\'%3EImage non disponible%3C/text%3E%3C/svg%3E';">` : `<div class="planning-card-image" style="display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.5);">Image non disponible</div>`;
+                    
+                    card.innerHTML = `
+                        ${image}
+                        <div class="planning-card-title">${anime.real_name || anime.name || 'N/A'}</div>
+                        <div class="planning-card-lang">${langageText}</div>
+                    `;
+                    
+                    singleDownloadContainer.appendChild(card);
+                });
+                
+                singleDownloadWrapper.appendChild(singleDownloadContainer);
+                singleDownloadSection.appendChild(singleDownloadWrapper);
+                container.appendChild(singleDownloadSection);
+            }
+            
+            // Trier les jours dans l'ordre (0-6, puis 7)
+            const sortedDays = Object.keys(groupedByDay).sort((a, b) => {
+                if (a === "7") return 1;
+                if (b === "7") return -1;
+                return parseInt(a) - parseInt(b);
+            });
+            
+            // Conteneur principal pour tous les jours (affichage horizontal)
+            const daysContainer = document.createElement('div');
+            daysContainer.style.display = 'flex';
+            daysContainer.style.flexDirection = 'row';
+            daysContainer.style.gap = '20px';
+            daysContainer.style.flexWrap = 'wrap';
+            daysContainer.style.width = '100%';
+            
+            // Obtenir le jour actuel (0 = dimanche, 1 = lundi, etc.)
+            // Mais notre mapping utilise 0 = lundi, donc on ajuste
+            const today = new Date().getDay(); // 0 = dimanche, 1 = lundi, ..., 6 = samedi
+            const currentDayId = today === 0 ? "6" : String(today - 1); // Convertir: dimanche(0) -> 6, lundi(1) -> 0, etc.
+            
+            sortedDays.forEach(dayId => {
+                const dayAnimes = groupedByDay[dayId];
+                const jourName = jours_mapping[dayId] || `Jour ${dayId}`;
+                
+                // Créer une section pour ce jour
+                const daySection = document.createElement('div');
+                daySection.style.display = 'flex';
+                daySection.style.flexDirection = 'column';
+                daySection.style.flex = '1 1 0';
+                daySection.style.minWidth = '120px';
+                daySection.style.maxWidth = '100%';
+                
+                // Bordure plus claire pour le jour actuel
+                if (dayId === currentDayId) {
+                    daySection.style.border = '2px solid rgba(255, 255, 255, 0.4)';
+                    daySection.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                } else {
+                    daySection.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+                    daySection.style.backgroundColor = 'rgba(255, 255, 255, 0.02)';
+                }
+                
+                daySection.style.borderRadius = '8px';
+                daySection.style.padding = '10px';
+                
+                const dayTitle = document.createElement('h3');
+                dayTitle.textContent = `${jourName} (${dayAnimes.length})`;
+                dayTitle.style.fontSize = '1rem';
+                dayTitle.style.marginBottom = '10px';
+                dayTitle.style.color = 'rgba(255, 255, 255, 0.9)';
+                dayTitle.style.textAlign = 'center';
+                dayTitle.style.paddingBottom = '8px';
+                dayTitle.style.borderBottom = '2px solid rgba(255, 255, 255, 0.2)';
+                daySection.appendChild(dayTitle);
+                
+                // Conteneur pour les cartes de ce jour (1 carte de large, vertical)
+                const dayCardsContainer = document.createElement('div');
+                dayCardsContainer.style.display = 'flex';
+                dayCardsContainer.style.flexDirection = 'column';
+                dayCardsContainer.style.gap = '12px';
+                dayCardsContainer.style.width = '100%';
+                
+                // Générer les cartes pour ce jour
+                dayAnimes.forEach(anime => {
+                    const card = document.createElement('div');
+                    card.className = `planning-card status-${anime.status}`;
+                    
+                    // Ajouter le gestionnaire de clic
+                    card.onclick = () => showAnimeDetails(anime);
+                    
+                    const langage = anime.langage || 'N/A';
+                    const season = anime.season ? `S${anime.season}` : '';
+                    const langageText = season ? `${langage} - ${season}` : langage;
+                    
+                    const image = anime.image ? `<img src="${anime.image}" alt="${anime.real_name}" class="planning-card-image" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\'%3E%3Crect fill=\'%23333\' width=\'200\' height=\'300\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' fill=\'%23999\' font-size=\'14\'%3EImage non disponible%3C/text%3E%3C/svg%3E';">` : `<div class="planning-card-image" style="display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.5);">Image non disponible</div>`;
+                    
+                    card.innerHTML = `
+                        ${image}
+                        <div class="planning-card-title">${anime.real_name || anime.name || 'N/A'}</div>
+                        <div class="planning-card-lang">${langageText}</div>
+                    `;
+                    
+                    dayCardsContainer.appendChild(card);
+                });
+                
+                daySection.appendChild(dayCardsContainer);
+                daysContainer.appendChild(daySection);
+            });
+            
+            container.appendChild(daysContainer);
+            
+            // Afficher les résultats
+            resultsDiv.style.display = 'block';
+        }
+        
+        function refreshPlanningResults() {
+            loadPlanningData();
+        }
+        
+        // Variables globales pour le modal
+        let currentAnimeDetails = null;
+        let currentAnimeUrl = null;
+        
+        function showAnimeDetails(anime) {
+            currentAnimeDetails = anime;
+            const modal = document.getElementById('anime-details-modal');
+            const body = document.getElementById('anime-details-body');
+            const footer = document.getElementById('anime-details-footer');
+            const title = document.getElementById('anime-details-title');
+            
+            // Afficher le modal
+            modal.classList.add('show');
+            
+            // Afficher le titre
+            title.textContent = anime.real_name || anime.name || 'Détails de l\'anime';
+            
+            // Afficher le chargement
+            body.innerHTML = '<div class="anime-details-loading">Chargement des détails...</div>';
+            footer.style.display = 'none';
+            
+            // Charger les détails depuis l'API
+            fetch('/local/planning/anime/details', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: anime.name,
+                    season: anime.season,
+                    langage: anime.langage
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    body.innerHTML = `<div class="anime-details-error">Erreur: ${data.error}</div>`;
+                    footer.style.display = 'flex';
+                    return;
+                }
+                
+                // Stocker l'URL de l'anime pour le bouton
+                currentAnimeUrl = data.anime_url || null;
+                
+                // Afficher les détails
+                const imageHtml = data.image ? 
+                    `<img src="${data.image}" alt="${data.title}" class="anime-details-image" onerror="this.style.display='none';">` : 
+                    '';
+                
+                const seasonsHtml = data.seasons && data.seasons.length > 0 ?
+                    `<div class="anime-details-seasons">
+                        <div class="anime-details-info-item">
+                            <span class="anime-details-info-label">Saisons disponibles:</span>
+                            <span class="anime-details-info-value">${data.seasons_count}</span>
+                        </div>
+                        <div class="anime-details-seasons-list">
+                            ${data.seasons.map(s => `<span class="anime-details-season-badge">Saison ${s}</span>`).join('')}
+                        </div>
+                    </div>` :
+                    `<div class="anime-details-info-item">
+                        <span class="anime-details-info-label">Saisons disponibles:</span>
+                        <span class="anime-details-info-value">Aucune information</span>
+                    </div>`;
+                
+                const episodesHtml = data.episodes_total > 0 ?
+                    `<div class="anime-details-info-item">
+                        <span class="anime-details-info-label">Épisodes installés:</span>
+                        <span class="anime-details-info-value">${data.episodes_installed} / ${data.episodes_total}</span>
+                        ${data.episodes_missing > 0 ? `<span style="color: #f59e0b; margin-left: 8px;">(${data.episodes_missing} manquant${data.episodes_missing > 1 ? 's' : ''})</span>` : ''}
+                    </div>` :
+                    `<div class="anime-details-info-item">
+                        <span class="anime-details-info-label">Épisodes installés:</span>
+                        <span class="anime-details-info-value">Aucune information disponible</span>
+                    </div>`;
+                
+                body.innerHTML = `
+                    ${imageHtml}
+                    <div class="anime-details-info">
+                        <div class="anime-details-info-item">
+                            <span class="anime-details-info-label">Nom:</span>
+                            <span class="anime-details-info-value">${data.title}</span>
+                        </div>
+                        <div class="anime-details-info-item">
+                            <span class="anime-details-info-label">Saison:</span>
+                            <span class="anime-details-info-value">${anime.season || 'N/A'}</span>
+                        </div>
+                        <div class="anime-details-info-item">
+                            <span class="anime-details-info-label">Langage:</span>
+                            <span class="anime-details-info-value">${anime.langage || 'N/A'}</span>
+                        </div>
+                        ${seasonsHtml}
+                        ${episodesHtml}
+                    </div>
+                    <div class="anime-details-description">
+                        <strong>Description:</strong><br>
+                        ${data.description || 'Description non disponible'}
+                    </div>
+                `;
+                
+                footer.style.display = 'flex';
+            })
+            .catch(error => {
+                body.innerHTML = `<div class="anime-details-error">Erreur lors du chargement: ${error.message}</div>`;
+                footer.style.display = 'flex';
+            });
+        }
+        
+        function closeAnimeDetails() {
+            const modal = document.getElementById('anime-details-modal');
+            modal.classList.remove('show');
+            currentAnimeDetails = null;
+            currentAnimeUrl = null;
+        }
+        
+        function openAnimeSamaPage() {
+            if (currentAnimeUrl) {
+                // Ouvrir dans un nouvel onglet
+                window.open(currentAnimeUrl, '_blank');
+            } else if (currentAnimeDetails && currentAnimeDetails.name) {
+                // Fallback si l'URL n'a pas été chargée
+                const animeName = currentAnimeDetails.name;
+                const baseUrl = 'https://anime-sama.tv'; // Par défaut
+                const animeUrl = `${baseUrl}/catalogue/${animeName}/`;
+                window.open(animeUrl, '_blank');
+            }
+        }
+        
+        function deleteAnime() {
+            if (!currentAnimeDetails) {
+                return;
+            }
+            
+            if (!confirm(`Êtes-vous sûr de vouloir supprimer "${currentAnimeDetails.real_name || currentAnimeDetails.name}" (S${currentAnimeDetails.season}, ${currentAnimeDetails.langage}) ?\n\nCette action supprimera l'anime de anime.json et de planning_scan_data.json.`)) {
+                return;
+            }
+            
+            fetch('/local/planning/anime/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: currentAnimeDetails.name,
+                    season: currentAnimeDetails.season,
+                    langage: currentAnimeDetails.langage,
+                    anime_day: currentAnimeDetails.anime_day
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showPopup('Erreur lors de la suppression: ' + data.error, 'error');
+                } else {
+                    showPopup(data.message || 'Anime supprimé avec succès', 'success');
+                    closeAnimeDetails();
+                    // Recharger les données
+                    refreshPlanningResults();
+                }
+            })
+            .catch(error => {
+                showPopup('Erreur lors de la suppression: ' + error.message, 'error');
+            });
+        }
+        
+        // Fermer le modal en cliquant en dehors
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('anime-details-modal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeAnimeDetails();
+                    }
+                });
+            }
+            
+            // Fermer avec Escape
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const modal = document.getElementById('anime-details-modal');
+                    if (modal && modal.classList.contains('show')) {
+                        closeAnimeDetails();
+                    }
+                }
+            });
+        });
+{% endblock %}
+

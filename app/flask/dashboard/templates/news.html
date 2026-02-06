@@ -1,0 +1,180 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Actualités - Dashboard Plex-Anime-Downloader{% endblock %}
+
+{% block extra_styles %}
+        /* Supprimer les espaces en début de contenu des news */
+        .news-list .card > div:last-child {
+            text-indent: 0 !important;
+            padding-left: 0 !important;
+        }
+        
+        /* Styles pour le rendu Markdown dans les news */
+        .news-content h1, .news-content h2, .news-content h3, .news-content h4, .news-content h5, .news-content h6 {
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+        .news-content h1 { font-size: 1.5em; }
+        .news-content h2 { font-size: 1.3em; }
+        .news-content h3 { font-size: 1.1em; }
+        .news-content h4 { font-size: 1em; }
+        .news-content h5 { font-size: 0.9em; }
+        .news-content h6 { font-size: 0.85em; }
+        .news-content p {
+            margin: 0.5em 0;
+        }
+        .news-content ul, .news-content ol {
+            margin: 0.5em 0;
+            padding-left: 2em;
+        }
+        .news-content li {
+            margin: 0.25em 0;
+        }
+        .news-content code {
+            background: rgba(0, 0, 0, 0.1);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+            font-family: 'Courier New', monospace;
+        }
+        .news-content pre {
+            background: rgba(0, 0, 0, 0.1);
+            padding: 1em;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 1em 0;
+        }
+        .news-content pre code {
+            background: none;
+            padding: 0;
+        }
+        .news-content blockquote {
+            border-left: 4px solid #ccc;
+            padding-left: 1em;
+            margin: 1em 0;
+            color: #666;
+        }
+        .news-content a {
+            color: #667eea;
+            text-decoration: underline;
+        }
+        .news-content a:hover {
+            color: #5568d3;
+        }
+        .news-content strong {
+            font-weight: 600;
+        }
+        .news-content em {
+            font-style: italic;
+        }
+        .news-content hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 1.5em 0;
+        }
+        .news-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        .news-content table th,
+        .news-content table td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        .news-content table th {
+            background: rgba(0, 0, 0, 0.05);
+            font-weight: 600;
+        }
+{% endblock %}
+
+{% block content %}
+<div class="tab-content">
+    <div class="card mt-4">
+        <h2 class="section-title">Actualités</h2>
+        <p class="sub">
+            Restez informé des dernières mises à jour et nouveautés de Plex Anime Downloader.
+        </p>
+
+    {% if news_disabled %}
+        <div class="empty" style="padding: 24px; text-align: center; background: rgba(245, 101, 101, 0.1); border: 1px solid rgba(245, 101, 101, 0.3); border-radius: 8px;">
+            <p style="font-size: 1rem; margin-bottom: 12px; color: #f56565;">
+                <strong>⚠️ Les actualités sont désactivées</strong>
+            </p>
+            <p style="font-size: 0.9rem; color: #666; margin-bottom: 16px;">
+                Pour recevoir les actualités et mises à jour, veuillez réactiver l'option "Activer les actualités" dans l'onglet <strong>Paramètres</strong>.
+            </p>
+            <a href="{{ url_for('local.local_dashboard_settings') }}" style="display: inline-block; padding: 8px 16px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; font-size: 0.9rem;">
+                Aller aux Paramètres
+            </a>
+        </div>
+    {% elif news_list %}
+        <div class="news-list" style="display: flex; flex-direction: column; gap: 16px;">
+            {% for news_item in news_list %}
+                <div class="card" style="margin-bottom: 0; padding: 16px; border-left: 4px solid {% if news_item.type == 'update' %}#667eea{% elif news_item.type == 'warning' %}#f56565{% elif news_item.type == 'info' %}#48bb78{% elif news_item.type == 'announcement' %}#ed8936{% else %}#95a5a6{% endif %};">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <span style="font-size: 1.2rem;">
+                            {% if news_item.type == 'update' %}🔄
+                            {% elif news_item.type == 'warning' %}⚠️
+                            {% elif news_item.type == 'info' %}ℹ️
+                            {% elif news_item.type == 'announcement' %}📢
+                            {% else %}💬{% endif %}
+                        </span>
+                        <h3 style="margin: 0; flex: 1; font-size: 1.1rem; color: inherit;">
+                            {{ news_item.title }}
+                        </h3>
+                        <span style="background: {% if news_item.type == 'update' %}#667eea{% elif news_item.type == 'warning' %}#f56565{% elif news_item.type == 'info' %}#48bb78{% elif news_item.type == 'announcement' %}#ed8936{% else %}#95a5a6{% endif %}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; text-transform: uppercase;">
+                            {{ news_item.type or 'message' }}
+                        </span>
+                    </div>
+                    {% if news_item.version %}
+                        <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 8px;">
+                            <strong>Version:</strong> {{ news_item.version }}
+                        </div>
+                    {% endif %}
+                    <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 12px;">
+                        <strong>Publié:</strong> {{ news_item.created_at[:19] }}
+                    </div>
+                    <div class="news-content" style="font-size: 0.9rem; color: #555; line-height: 1.6; text-align: left; text-indent: 0;">
+                        {% if news_item.get('content_is_html', False) %}
+                            {{ news_item.content|safe }}
+                        {% else %}
+                            <div style="white-space: pre-wrap;">{{ news_item.content }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% elif not news_error %}
+        <div class="empty">
+            <p>Aucune actualité pour le moment.</p>
+            <p>Les actualités seront affichées ici prochainement.</p>
+        </div>
+    {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+        // Afficher les erreurs de news
+        {% if news_error %}
+            showPopup('{{ news_error|replace("'", "\\'")|safe }}', 'error');
+        {% endif %}
+        
+        // Nettoyer les espaces en début de contenu des news (seulement pour le texte brut, pas le HTML)
+        document.querySelectorAll('.news-content').forEach(function(div) {
+            // Vérifier si c'est du HTML ou du texte brut
+            if (div.children.length === 0 && div.textContent) {
+                // C'est du texte brut, nettoyer les espaces
+                let text = div.textContent;
+                text = text.replace(/^[\s\n\r]+/, '');
+                if (text !== div.textContent) {
+                    div.textContent = text;
+                }
+            }
+        });
+{% endblock %}
+

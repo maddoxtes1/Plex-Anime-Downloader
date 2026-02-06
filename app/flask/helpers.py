@@ -52,7 +52,8 @@ class FlaskHelpers:
                 "franime": False,
                 "news": True,
                 "log_level": "INFO",
-                "as_Baseurl": "https://anime-sama.tv",
+                "base_url": "https://anime-sama.tv",
+                "auto_planning": True,
             }
 
         cfg = configparser.ConfigParser(allow_no_value=True)
@@ -63,7 +64,19 @@ class FlaskHelpers:
         franime = cfg.get("scan-option", "franime", fallback="False").lower() == "true"
         news = cfg.get("settings", "news", fallback="True").lower() == "true"
         log_level = cfg.get("settings", "log_level", fallback="INFO")
-        as_Baseurl = cfg.get("scan-option", "as_Baseurl", fallback="https://anime-sama.tv")
+        # Essayer d'abord la nouvelle structure (anime_sama.base_url), puis l'ancienne (scan-option.as_Baseurl) pour compatibilité
+        if cfg.has_section("anime_sama") and cfg.has_option("anime_sama", "base_url"):
+            base_url = cfg.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
+        elif cfg.has_section("scan-option") and cfg.has_option("scan-option", "as_Baseurl"):
+            base_url = cfg.get("scan-option", "as_Baseurl", fallback="https://anime-sama.tv")
+        else:
+            base_url = "https://anime-sama.tv"
+        
+        # Lire auto_planning depuis anime_sama
+        auto_planning = True  # Valeur par défaut
+        if cfg.has_section("anime_sama") and cfg.has_option("anime_sama", "auto_planning"):
+            auto_planning = cfg.get("anime_sama", "auto_planning", fallback="True").lower() == "true"
+        
         return {
             "threads": threads,
             "timer": timer,
@@ -71,10 +84,11 @@ class FlaskHelpers:
             "franime": franime,
             "news": news,
             "log_level": log_level,
-            "as_Baseurl": as_Baseurl,
+            "as_Baseurl": base_url,  # Garder le nom pour compatibilité avec le frontend
+            "auto_planning": auto_planning,
         }
 
-    def save_config_conf(self, threads: int, timer: int, anime_sama: bool, franime: bool, news: bool = None, log_level: str = None, as_Baseurl: str = None):
+    def save_config_conf(self, threads: int, timer: int, anime_sama: bool, franime: bool, news: bool = None, log_level: str = None, as_Baseurl: str = None, auto_planning: bool = None):
         """
         Met à jour config.conf avec les nouvelles valeurs en préservant les autres paramètres.
         """
@@ -99,6 +113,8 @@ class FlaskHelpers:
             cfg.add_section("settings")
         if not cfg.has_section("scan-option"):
             cfg.add_section("scan-option")
+        if not cfg.has_section("anime_sama"):
+            cfg.add_section("anime_sama")
         
         # Mettre à jour les paramètres modifiés
         cfg.set("settings", "threads", str(threads))
@@ -120,12 +136,28 @@ class FlaskHelpers:
         elif not cfg.has_option("settings", "log_level"):
             cfg.set("settings", "log_level", "INFO")
         
-        # Mettre à jour as_Baseurl si fourni
+        # Mettre à jour base_url dans la section anime_sama si fourni
         if as_Baseurl is not None:
-            cfg.set("scan-option", "as_Baseurl", as_Baseurl)
+            cfg.set("anime_sama", "base_url", as_Baseurl)
+            # Supprimer l'ancienne clé si elle existe (migration)
+            if cfg.has_option("scan-option", "as_Baseurl"):
+                cfg.remove_option("scan-option", "as_Baseurl")
         # Sinon, préserver la valeur existante ou utiliser la valeur par défaut
-        elif not cfg.has_option("scan-option", "as_Baseurl"):
-            cfg.set("scan-option", "as_Baseurl", "https://anime-sama.tv")
+        elif not cfg.has_option("anime_sama", "base_url"):
+            # Essayer de migrer depuis l'ancienne structure
+            if cfg.has_option("scan-option", "as_Baseurl"):
+                old_value = cfg.get("scan-option", "as_Baseurl")
+                cfg.set("anime_sama", "base_url", old_value)
+                cfg.remove_option("scan-option", "as_Baseurl")
+            else:
+                cfg.set("anime_sama", "base_url", "https://anime-sama.tv")
+        
+        # Mettre à jour auto_planning si fourni
+        if auto_planning is not None:
+            cfg.set("anime_sama", "auto_planning", "True" if auto_planning else "False")
+        # Sinon, préserver la valeur existante ou utiliser la valeur par défaut
+        elif not cfg.has_option("anime_sama", "auto_planning"):
+            cfg.set("anime_sama", "auto_planning", "True")
         
         # Préserver le thème s'il existe
         if not cfg.has_option("settings", "theme"):

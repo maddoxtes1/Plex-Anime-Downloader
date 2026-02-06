@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}Dashboard Plex-Anime-Downloader{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icon.png') }}">
+    <style>
+        {{ theme_css|safe }}
+        
+        /* Modifier le wrapper pour prendre toute la largeur */
+        .wrapper {
+            max-width: 95% !important;
+            margin: 24px auto !important;
+            padding: 0 24px 32px !important;
+        }
+        
+        /* Supprimer l'espace en haut de l'onglet news et s'assurer qu'il est visible */
+        /* Important: avec les pages séparées, on n'utilise plus le système d'onglets actif/inactif */
+        .wrapper .tab-content,
+        .tab-content {
+            margin-top: 0 !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            padding: 0 !important;
+        }
+        
+        /* S'assurer que le contenu est visible */
+        .wrapper {
+            display: block !important;
+            visibility: visible !important;
+        }
+        
+        /* Override du CSS du thème qui cache .tab-content par défaut */
+        .tab-content.active,
+        .tab-content {
+            display: block !important;
+        }
+        
+        /* Styles pour les liens de navigation */
+        .tab-button-header {
+            text-decoration: none !important;
+            display: inline-block !important;
+            color: inherit !important;
+        }
+        
+        .tab-button-header:hover {
+            opacity: 0.8;
+        }
+        
+        /* Mettre en évidence le lien actif */
+        .tab-button-header.active {
+            background: rgba(102, 126, 234, 0.2) !important;
+        }
+        
+        /* Ajuster les boutons d'onglets pour qu'ils s'adaptent à leur texte */
+        .tab-button-header {
+            flex: 0 0 auto !important;
+            width: auto !important;
+            min-width: auto !important;
+        }
+        
+        /* Ajuster la taille des boutons pour correspondre au texte */
+        button.btn {
+            font-size: 0.875rem;
+            padding: 0.375rem 0.75rem;
+            line-height: 1.5;
+            height: auto;
+        }
+        
+        /* Aligner les boutons dans les formulaires */
+        form.inline {
+            display: inline-block;
+            margin: 0;
+        }
+        
+        /* S'assurer que les boutons dans les tableaux sont alignés */
+        table td form {
+            margin: 0;
+        }
+        
+        /* Système de popup/toast */
+        .popup-container {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .popup {
+            min-width: 300px;
+            max-width: 500px;
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            animation: slideInLeft 0.3s ease-out, fadeOut 0.3s ease-in 4.7s forwards;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.9rem;
+        }
+        
+        .popup.success {
+            background-color: #48bb78;
+            color: white;
+        }
+        
+        .popup.error {
+            background-color: #f56565;
+            color: white;
+        }
+        
+        .popup.warning {
+            background-color: #ed8936;
+            color: white;
+        }
+        
+        .popup.info {
+            background-color: #4299e1;
+            color: white;
+        }
+        
+        .popup-icon {
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+        
+        .popup-message {
+            flex: 1;
+        }
+        
+        .popup-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        
+        .popup-close:hover {
+            opacity: 1;
+        }
+        
+        @keyframes slideInLeft {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+            to {
+                opacity: 0;
+            }
+        }
+        
+        /* Modale de confirmation */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+            animation: fadeIn 0.2s ease-out;
+        }
+        
+        .modal-overlay.show {
+            display: flex;
+        }
+        
+        .modal {
+            background: {{ theme_colors.bg_card }};
+            border: 1px solid {{ theme_colors.border }};
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.3s ease-out;
+        }
+        
+        .modal-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .modal-icon {
+            font-size: 2rem;
+        }
+        
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0;
+            color: {{ theme_colors.text_primary }};
+        }
+        
+        .modal-body {
+            margin-bottom: 20px;
+            line-height: 1.6;
+            color: {{ theme_colors.text_secondary }};
+        }
+        
+        .modal-body strong {
+            color: {{ theme_colors.text_primary }};
+        }
+        
+        .modal-warning {
+            background: rgba(255, 193, 7, 0.15);
+            border: 1px solid rgba(255, 193, 7, 0.4);
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 12px;
+            color: {{ theme_colors.text_primary }};
+        }
+        
+        .modal-warning strong {
+            color: {{ theme_colors.accent_tertiary if theme_colors.accent_tertiary else '#ffbe0b' }};
+        }
+        
+        .modal-footer {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+        
+        .modal-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .modal-btn-cancel {
+            background: {{ theme_colors.bg_secondary }};
+            color: {{ theme_colors.text_primary }};
+            border: 1px solid {{ theme_colors.border }};
+        }
+        
+        .modal-btn-cancel:hover {
+            background: {{ theme_colors.border }};
+        }
+        
+        .modal-btn-confirm {
+            background: {{ theme_colors.error }};
+            color: white;
+            border: 1px solid {{ theme_colors.error }};
+        }
+        
+        .modal-btn-confirm:hover {
+            filter: brightness(1.1);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        {% block extra_styles %}{% endblock %}
+    </style>
+</head>
+<body>
+    <header>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <img src="{{ url_for('static', filename='icon.png') }}" alt="Icon" style="width: 32px; height: 32px;">
+            <h1>Dashboard Plex-Anime-Downloader</h1>
+        </div>
+        <div class="right">
+            <!-- Barre d'onglets -->
+            <div class="tabs-container-header">
+                <a href="{{ url_for('local.local_dashboard_news') }}" class="tab-button-header" id="btn-tab-news" style="text-decoration: none; display: inline-block;">📰 Actualités</a>
+                <a href="{{ url_for('local.local_dashboard_planning') }}" class="tab-button-header" id="btn-tab-planning" style="text-decoration: none; display: inline-block;">📅 Planning</a>
+                <a href="{{ url_for('local.local_dashboard_logs') }}" class="tab-button-header" id="btn-tab-logs" style="text-decoration: none; display: inline-block;">📋 Logs</a>
+                <a href="{{ url_for('local.local_dashboard_settings') }}" class="tab-button-header" id="btn-tab-settings" style="text-decoration: none; display: inline-block;">⚙️ Paramètres</a>
+            </div>
+            <a href="{{ url_for('local.local_logout') }}">Déconnexion</a>
+        </div>
+    </header>
+
+    <!-- Container pour les popups -->
+    <div class="popup-container" id="popup-container"></div>
+    
+    <!-- Modale de confirmation pour suppression -->
+    <div class="modal-overlay" id="delete-confirm-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-icon">⚠️</span>
+                <h3 class="modal-title">Confirmer la suppression</h3>
+            </div>
+            <div class="modal-body">
+                <p>Voulez-vous vraiment supprimer le dossier <strong id="delete-path-name"></strong> ?</p>
+                <div class="modal-warning">
+                    <strong>⚠️ Attention :</strong> Si vous cliquez sur "Continuer", tous les fichiers présents dans ce dossier seront définitivement supprimés. Cette action est irréversible.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-cancel" onclick="closeDeleteModal()">Annuler</button>
+                <button class="modal-btn modal-btn-confirm" id="confirm-delete-btn">Continuer</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="wrapper">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script>
+        // Système de popup/toast
+        function showPopup(message, category = 'info') {
+            const container = document.getElementById('popup-container');
+            const popup = document.createElement('div');
+            popup.className = `popup ${category}`;
+            
+            const icons = {
+                'success': '✅',
+                'error': '⚠️',
+                'warning': '⚠️',
+                'info': 'ℹ️'
+            };
+            
+            popup.innerHTML = `
+                <span class="popup-icon">${icons[category] || icons.info}</span>
+                <span class="popup-message">${message}</span>
+                <button class="popup-close" onclick="this.parentElement.remove()">×</button>
+            `;
+            
+            container.appendChild(popup);
+            
+            // Supprimer automatiquement après 5 secondes
+            setTimeout(() => {
+                if (popup.parentElement) {
+                    popup.style.animation = 'fadeOut 0.3s ease-in forwards';
+                    setTimeout(() => popup.remove(), 300);
+                }
+            }, 5000);
+        }
+        
+        // Afficher les messages flash de Flask au chargement de la page
+        document.addEventListener('DOMContentLoaded', function() {
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        showPopup('{{ message|replace("'", "\\'")|safe }}', '{{ category }}');
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            // Mettre en évidence le lien actif selon la page
+            const currentPath = window.location.pathname;
+            const tabButtons = document.querySelectorAll('.tab-button-header');
+            tabButtons.forEach(btn => {
+                btn.classList.remove('active');
+                const href = btn.getAttribute('href');
+                if (href && currentPath === href) {
+                    btn.classList.add('active');
+                }
+            });
+        });
+        
+        // Fonction pour la modale de suppression
+        let deletePathToRemove = null;
+        
+        function openDeleteModal(path) {
+            deletePathToRemove = path;
+            const pathName = path.split('/').pop() || path;
+            document.getElementById('delete-path-name').textContent = pathName;
+            document.getElementById('delete-confirm-modal').classList.add('show');
+        }
+        
+        function closeDeleteModal() {
+            document.getElementById('delete-confirm-modal').classList.remove('show');
+            deletePathToRemove = null;
+        }
+        
+        document.getElementById('confirm-delete-btn').addEventListener('click', function() {
+            if (deletePathToRemove) {
+                // Créer un formulaire pour la suppression (POST)
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '{{ url_for("local.local_plex_delete") }}';
+                
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'path';
+                input.value = deletePathToRemove;
+                
+                form.appendChild(input);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
+        
+        // Fermer la modale en cliquant en dehors
+        document.getElementById('delete-confirm-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeDeleteModal();
+            }
+        });
+        
+        {% block extra_scripts %}{% endblock %}
+    </script>
+</body>
+</html>
+
