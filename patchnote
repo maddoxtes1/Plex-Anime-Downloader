@@ -1,0 +1,257 @@
+beta-0.7.0
+
+## 📅 Système de scan du planning anime-sama
+
+### 🆕 Nouvelle fonctionnalité majeure
+Un système complet de scan du planning anime-sama a été intégré pour comparer automatiquement vos animes avec le planning officiel et identifier les animes qui ne sont plus diffusés ou qui ont tous leurs épisodes installés.
+
+### 🔍 Fonctionnalités du scan
+- **Scan automatique** : Le système scanne automatiquement le planning au démarrage et à chaque cycle du streaming manager
+- **Comparaison intelligente** : Compare vos animes avec le planning officiel d'anime-sama organisé par jour de la semaine
+- **Vérification des épisodes** : Pour les animes non trouvés dans le planning, vérifie automatiquement si tous les épisodes sont installés
+- **Support des saisons complexes** : Gère les saisons au format `x-y` (ex: `saison3-2`) en téléchargeant et combinant plusieurs fichiers `episodes.js`
+- **Support des animes spéciaux** : Gère les animes `single_download` et `no_day` (jour 7) avec des traitements spécifiques
+
+### 🗑️ Suppression automatique (optionnelle)
+Une nouvelle option `auto_planning` permet de supprimer automatiquement les animes selon des critères précis :
+- **Pour auto_download** : Supprime si l'anime n'est plus dans le planning ET tous les épisodes sont installés
+- **Pour single_download** : Supprime si tous les épisodes sont installés
+- **Activation** : Option disponible dans l'onglet Paramètres du dashboard local
+
+### 💾 Stockage persistant
+- Les résultats du scan sont sauvegardés dans `planning_scan_data.json` pour consultation ultérieure
+- Le statut du scan utilise une variable globale (plus de fichier JSON temporaire)
+
+## 🎨 Refonte complète du dashboard
+
+### 🏗️ Architecture améliorée
+Le dashboard a été complètement refondu pour une meilleure organisation et maintenabilité :
+- **Pages séparées** : Chaque onglet est maintenant une page distincte avec sa propre route :
+  * `/local/dashboard/news` - Page Actualités
+  * `/local/dashboard/planning` - Page Planning (nouvelle)
+  * `/local/dashboard/logs` - Page Logs
+  * `/local/dashboard/settings` - Page Paramètres
+- **Template de base** : Création de `base_dashboard.html` comme template commun avec header et navigation
+- **Templates individuels** : Chaque page a son propre template pour faciliter la maintenance
+- **Navigation améliorée** : Navigation fluide entre les pages avec liens directs
+
+### 📊 Nouvelle page Planning
+Une page dédiée au scan du planning avec de nombreuses fonctionnalités :
+
+#### 🎯 Affichage des résultats
+- **Cartes colorées** selon le statut de l'anime :
+  * 🟢 **Normal** (pas de couleur) : Anime trouvé dans le planning
+  * 🟢 **Vert** : Pas dans le planning mais tous les épisodes installés
+  * 🟡 **Jaune** : Pas dans le planning et épisodes incomplets
+  * 🔴 **Rouge** : Anime non trouvé sur anime-sama
+- **Organisation par jour** : Affichage groupé par jour de la semaine avec bordures distinctes
+- **Section spéciale** : Section horizontale pour les animes `single_download`
+- **Statistiques en temps réel** : Compteurs en haut de page (total, correct, verts, jaunes, rouges)
+- **Design responsive** : Affichage adaptatif pour tous les écrans
+
+#### 🔍 Modal de détails d'anime
+En cliquant sur une carte d'anime, une modal s'ouvre avec :
+- **Informations complètes** : Titre réel, image, description complète de l'anime
+- **Liste des saisons** : Toutes les saisons disponibles sur anime-sama avec nombre d'épisodes
+- **Statut d'installation** : Nombre d'épisodes installés vs total pour chaque saison
+- **Actions rapides** :
+  * 🔗 Bouton pour ouvrir la page anime-sama dans un nouvel onglet
+  * 🗑️ Bouton pour supprimer l'anime de `anime.json` et `planning_scan_data.json`
+
+#### ⚙️ Contrôles du scan
+- **Bouton de scan manuel** : Lancer un scan à tout moment
+- **Écran de chargement** : Affichage pendant le scan avec indication du statut
+- **Polling automatique** : Mise à jour automatique de l'interface pendant le scan
+- **Affichage des résultats** : Résultats affichés immédiatement après le scan
+
+## 🔧 API anime-sama améliorée
+
+### 📡 Nouvelles fonctions
+- **extract_anime_info()** : Extrait le titre et l'image depuis la page catalogue (accepte maintenant `name` au lieu de `url` complet)
+- **extract_anime_details()** : Nouvelle fonction pour extraire la description complète et la liste des saisons depuis la page catalogue
+- **get_planning_anime_urls()** : Récupère les URLs du planning organisées par jour (0-7), avec support du `no_day` (jour 7)
+
+### 🎯 Améliorations techniques
+- **Extraction robuste** : Amélioration de l'extraction des saisons depuis le HTML (div flex flex-wrap bg-slate-900)
+- **Description précise** : Extraction améliorée de la description depuis le h2 'Synopsis'
+- **Gestion des erreurs** : Meilleure gestion des cas où l'anime n'est pas trouvé
+
+## ⚙️ Configuration améliorée
+
+### 🔄 Migration de configuration
+- **Nouvelle structure** : Migration de `as_Baseurl` vers la nouvelle structure `[anime_sama]` avec `base_url`
+- **Rétrocompatibilité** : L'ancienne structure `[scan-option]` est toujours supportée pour la migration
+- **Nouveau paramètre** : Ajout de `auto_planning` dans la section `[anime_sama]`
+- **Migration automatique** : Les anciennes configurations sont automatiquement migrées vers la nouvelle structure
+
+### 📝 Fichiers de configuration
+- **planning_scan_data.json** : Ajouté dans la section database de `config.py` pour le stockage persistant
+- **Structure unifiée** : Tous les paramètres anime-sama sont maintenant regroupés dans `[anime_sama]`
+
+## 🚀 Améliorations du manager
+
+### 🔄 Scan intégré
+- **Scan automatique** : Le scan du planning est maintenant intégré dans le streaming manager
+- **Exécution synchrone** : Le scan s'exécute de manière synchrone pour garantir la cohérence des données
+- **Enrichissement des données** : Les résultats du scan sont enrichis avec `extract_anime_info()` pour obtenir le nom réel et l'image de chaque anime
+- **Gestion du statut** : Utilisation de variables globales pour le statut du scan (plus rapide et plus fiable)
+
+## 🐛 Corrections et améliorations
+
+### 🔧 Corrections techniques
+- **Redirections** : Correction des redirections pour rester sur la page actuelle après les actions (notamment dans Settings)
+- **Gestion des erreurs** : Amélioration de la gestion des erreurs et du logging
+- **Support des saisons multi-parties** : Amélioration de `check_episodes_complete()` pour gérer les saisons au format `x-y`
+- **Interface utilisateur** : Standardisation des descriptions dans le panneau settings (format uniforme)
+
+### 📱 Améliorations UX
+- **Navigation fluide** : Passage d'un système d'onglets avec fragments URL à des routes séparées pour une meilleure navigation
+- **Affichage optimisé** : Correction des problèmes d'affichage avec les CSS de thème
+- **Responsive design** : Amélioration de l'affichage sur tous les types d'écrans
+
+## 📦 Fichiers modifiés
+
+### Nouveaux fichiers
+- `app/flask/dashboard/templates/base_dashboard.html` - Template de base du dashboard
+- `app/flask/dashboard/templates/news.html` - Page Actualités
+- `app/flask/dashboard/templates/planning.html` - Page Planning
+- `app/flask/dashboard/templates/logs.html` - Page Logs
+- `app/flask/dashboard/templates/settings.html` - Page Paramètres
+
+### Fichiers modifiés
+- `app/streaming/function/anime_sama.py` - Ajout de `anime_sama_planning` avec support saisons x-y et auto-delete
+- `app/streaming/api/anime_sama_api.py` - Nouvelles fonctions et améliorations
+- `app/streaming/manager.py` - Intégration du scan du planning
+- `app/flask/dashboard/routes/local_routes.py` - Nouvelles routes planning, détails, suppression
+- `app/flask/helpers.py` - Mise à jour pour nouvelle structure config
+- `app/sys/config.py` - Ajout planning_scan_data.json, mise à jour structure anime_sama
+
+### Fichiers supprimés
+- `app/flask/dashboard/templates/local_dashboard.html` - Remplacé par les templates séparés
+
+beta-0.6.6
+
+## ⚠️ Correction importante - Réinstallation de l'extension requise
+
+### 🐛 Bug corrigé
+Un problème de version dans la Beta-0.6.5 empêchait l'extension de fonctionner correctement. Ce bug a été corrigé dans la Beta-0.6.6.
+
+### 🔄 Action requise
+**⚠️ IMPORTANT** : Pour bénéficier de toutes les améliorations et corrections de cette version, vous devez **réinstaller l'extension** dans votre navigateur :
+1. Supprimez l'ancienne version de l'extension
+2. Installez la nouvelle version Beta-0.6.6
+3. Reconnectez-vous à votre serveur depuis l'extension
+
+L'extension devrait maintenant fonctionner correctement avec toutes les nouvelles fonctionnalités !
+
+## 🔔 Amélioration du système de notifications
+
+### ✨ Expérience utilisateur améliorée
+Les notifications ont été complètement repensées pour offrir une expérience plus agréable et informative :
+- 📚 **Empilement intelligent** : Les notifications ne se superposent plus ! Les nouvelles notifications apparaissent en dessous des anciennes, créant une pile élégante
+- 📏 **Taille optimisée** : Les notifications sont maintenant plus compactes et discrètes, sans perdre en lisibilité
+- ⚡ **Affichage plus rapide** : Les animations sont plus fluides et les notifications disparaissent après 2 secondes (au lieu de 5)
+- 🎯 **Messages personnalisés** : Le nom réel de l'anime est maintenant affiché dans les notifications au lieu de messages génériques comme "Cet anime" ou "Anime supprimé"
+- 🎨 **Design moderne** : Nouveau style avec effet de flou (backdrop-filter), bordures colorées et icônes visuelles (✓ pour succès, ✕ pour erreur, ⚠ pour avertissement)
+
+### 📱 Types de notifications
+- ✅ **Succès** : Affichées en vert lors de l'ajout ou de la suppression réussie d'un anime
+- ❌ **Erreur** : Affichées en rouge pour les erreurs (anime déjà présent, saison non supportée, etc.)
+- ⚠️ **Avertissement** : Affichées en orange pour les cas particuliers (anime déjà dans la liste)
+
+## 📺 Support des saisons avec plages
+
+### 🆕 Nouvelle fonctionnalité
+L'extension supporte maintenant les saisons avec plages numériques (ex: `saison1-2`, `saison3-5`) :
+- ✅ **Saisons simples** : `saison1` → enregistré comme `"season": "1"`
+- ✅ **Saisons avec plages** : `saison1-2` → enregistré comme `"season": "1-2"`
+- ✅ **Distinction claire** : Les saisons `1` et `1-2` sont maintenant traitées comme des entrées distinctes dans la liste
+
+### 🚫 Saisons non supportées
+Certains types de saisons ne sont pas supportés pour garantir la cohérence des données :
+- ❌ **Saisons avec suffixes** : `saison1hs`, `saison2special`, `saison3ova` → Rejetées avec un message d'erreur explicite
+- 💬 **Message informatif** : Un message clair indique que ce type de saison n'est pas supporté et suggère d'utiliser la version standard ou avec tirets
+- 🎯 **Indication visuelle** : Sur les pages de catalogue et les cartes du planning, un message "Saison non supportée" remplace le bouton de téléchargement pour ces saisons
+
+### 🔧 Améliorations techniques
+- 🔍 **Validation côté client** : Vérification immédiate dans l'extension avant d'envoyer la requête au serveur
+- 🛡️ **Validation côté serveur** : Double vérification dans l'API pour garantir l'intégrité des données
+- 📝 **Extraction améliorée** : L'extraction de la saison depuis l'URL est maintenant plus robuste et conserve les tirets
+
+
+
+"beta-0.6.5
+
+## 🌐 URL de base anime-sama configurable
+
+### 📋 Contexte
+À chaque changement de domaine d'anime-sama (anime-sama.eu → anime-sama.tv, etc.), il était nécessaire de modifier le code source, de rebuild l'image Docker et de redéployer l'application. Cette procédure était fastidieuse et nécessitait une nouvelle version à chaque changement.
+
+### ✨ Nouvelle fonctionnalité
+Une option `as_Baseurl` a été ajoutée dans la configuration, permettant de modifier l'URL de base directement depuis le dashboard local, sans intervention sur le code source. En cas de changement de domaine, une simple annonce sur le forum suffit pour informer les utilisateurs, qui peuvent alors mettre à jour l'URL en quelques clics.
+
+### 🔧 Fonctionnement
+- 📝 Le paramètre `as_Baseurl` est accessible dans l'onglet **Paramètres** du dashboard local
+- 🔗 Il suffit de modifier l'URL (ex: `https://anime-sama.tv`) et de sauvegarder
+- ⚙️ Le système utilise automatiquement cette URL pour tous les téléchargements
+- 🔄 **Synchronisation automatique avec l'extension** : L'extension récupère l'URL depuis l'API et s'adapte automatiquement au nouveau domaine. Une mise à jour de l'extension vers Beta-0.6.5 est nécessaire pour bénéficier de cette fonctionnalité
+- 🔒 L'extension injecte dynamiquement ses scripts uniquement sur le domaine configuré (sécurité renforcée)
+
+### 🚀 Migration automatique
+- ✅ Les installations existantes reçoivent automatiquement le paramètre avec la valeur par défaut `https://anime-sama.tv` lors de la mise à jour vers Beta-0.6.5
+
+beta-0.6.3
+
+## 🎨 Interface utilisateur
+
+### Système de thèmes
+- Ajout de 6 thèmes personnalisables pour le dashboard local et l'extension
+- Thèmes disponibles : Dark, Light, Blue, Purple, Green, Orange
+- Sélection du thème directement depuis le dashboard local
+- Synchronisation automatique du thème avec l'extension navigateur
+- Application du thème sur toutes les pages (dashboard, access, extension)
+
+### Amélioration du dashboard local
+- Nouveau système d'onglets : News, Logs, Settings
+- Interface réorganisée pour une meilleure navigation
+
+### Extension navigateur
+- Correction du popup de l'extension (problème d'affichage résolu)
+- Affichage amélioré du statut de connexion (IP du serveur au lieu de l'URL complète)
+- Boutons de connexion redimensionnés pour une meilleure ergonomie
+- Synchronisation automatique du thème avec le dashboard
+
+## 📰 Système d'actualités
+
+### Intégration dans le dashboard
+- Nouvel onglet "News" dans le dashboard local
+- Récupération automatique des actualités depuis le serveur centralisé
+- Affichage des actualités avec icônes et couleurs selon le type
+- Support des actualités même pour les serveurs outdated
+
+## 📊 Système de tracking
+
+### Suivi des serveurs
+- Génération automatique d'un ID unique par serveur (UUID)
+- Tracking anonyme des serveurs en ligne
+- Statistiques : nombre de serveurs en ligne, total créés, répartition par version
+- Aucune collecte d'informations personnelles (pas d'IP, pas de données sensibles)
+- Ping automatique toutes les 5 minutes vers le serveur d'actualités
+
+## 📝 Gestion des logs
+
+### Visualisation des logs
+- Nouvel onglet "Logs" dans le dashboard local
+- Affichage de tous les fichiers de logs de l'application
+- Streaming en temps réel des logs Docker (tous les fichiers combinés)
+- Formatage terminal pour une lecture optimale
+- Sélection du fichier de log à afficher
+- Option "Docker logs (real-time)" pour voir tous les logs en direct
+
+## ⚙️ Gestion des versions
+
+### Système de versioning
+- Stockage de la version dans config.conf
+- Validation automatique des versions connues
+- Mise à jour automatique vers une version valide si version inconnue
+- Liste des versions connues pour faciliter les mises à jour
