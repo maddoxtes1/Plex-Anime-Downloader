@@ -1,7 +1,7 @@
 from app.sys import FolderConfig, universal_logger, LoggerConfig, ping_news_server
 from app.flask import flask_manager
 from app.queue.manager import queues
-from app.streaming.manager import streaming_manager
+from app.streaming import stream_manager
 
 class App:
     def __init__(self):
@@ -17,7 +17,7 @@ class App:
 
         ping_news_server()
         
-        streaming_manager(queue=queue_manager)
+        stream_manager(queue=queue_manager)
         self.logger.info(msg="Streaming manager initialized")
 
 
