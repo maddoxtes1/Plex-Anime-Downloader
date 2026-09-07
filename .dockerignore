@@ -11,4 +11,5 @@ franime.py
 franime_api.py
 patchnote
 __pycache__/
-flask/
+flasks/
+.playwright-mcp
