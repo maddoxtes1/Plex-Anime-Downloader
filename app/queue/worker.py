@@ -3,7 +3,7 @@ import os
 import queue
 
 from mp4mdl import mp4mdl
-from ..sys.database import database
+from ..sys.database import anime_data_database
 from ..sys import universal_logger
 
 def _worker(download_queue, download_path):
@@ -26,8 +26,8 @@ def _worker(download_queue, download_path):
                         break
             if status == True:
                 logs.info(f"Téléchargement Terminé")
-                db = database()
-                db.update_episode(path_name=path_name, series_name=serie_name, season_name=season_name, episode_list=(episode_name, "downloaded", episode_urls))
+                db = anime_data_database()
+                db.update_episode_status(path_name=path_name, series_name=serie_name, season_name=season_name, episode_name=episode_name, episode_status="downloaded")
             else:
                 logs.error(f"Toutes les URLs ont échoué")
             download_queue.task_done()
