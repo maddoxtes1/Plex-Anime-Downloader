@@ -1,3 +1,1 @@
-"""
-Package de gestion des sites de streaming
-""" 
+from .manager import function, stream_manager

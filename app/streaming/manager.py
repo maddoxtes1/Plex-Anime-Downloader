@@ -1,65 +1,70 @@
-import time
-import pytz
-from datetime import datetime
+import os
 import json
-import re
-import threading
 from configparser import ConfigParser
+import re
+import pytz
+import requests
+import time
+from datetime import datetime
 
-from ..sys import FolderConfig, EnvConfig, universal_logger
-from .function import anime_sama #, franime
+from ..sys import universal_logger, FolderConfig, EnvConfig
+from ..sys.database import anime_data_database
+from .api import anime_sama_api, franime_api
 
-# Variable globale pour tracker le statut du scan du planning
-_planning_scan_status = {
-    "status": "idle",
-    "started_at": None,
-    "completed_at": None,
-    "error": None
-}
 
-def get_planning_scan_status():
-    """Retourne le statut actuel du scan du planning"""
-    return _planning_scan_status.copy()
+class function:
+    def __init__(self):
+        self.logger = universal_logger(name="Stream Manager - Functions", log_file="sys.log")
 
-def set_planning_scan_status(status, started_at=None, completed_at=None, error=None):
-    """Met à jour le statut du scan du planning"""
-    global _planning_scan_status
-    _planning_scan_status["status"] = status
-    if started_at:
-        _planning_scan_status["started_at"] = started_at
-    if completed_at:
-        _planning_scan_status["completed_at"] = completed_at
-    if error:
-        _planning_scan_status["error"] = error
-    if status == "idle":
-        _planning_scan_status["started_at"] = None
-        _planning_scan_status["completed_at"] = None
-        _planning_scan_status["error"] = None
-
-class streaming_manager:
-    def __init__(self, queue):
-        self.queue = queue
-        self.download_path = FolderConfig.find_path(folder_name="download")
-        self.plex_path = EnvConfig.get_env("plex_path")
-        self.anime_json = FolderConfig.find_path(file_name="anime.json")
-
+    def try_flaresolver(self):
         config_path = FolderConfig.find_path(file_name="config.conf")
         config = ConfigParser(allow_no_value=True)
         config.read(config_path, encoding='utf-8')
+        flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
+        flaresolver_port = config.get("flaresolver", "port", fallback="8191")
+        try:
+            response = requests.get(f"http://{flaresolver_host}:{flaresolver_port}/health")
+            return response.status_code == 200
+        except Exception as e:
+            self.logger.error(f"Flaresolver est pas accessible: {flaresolver_host}:{flaresolver_port} - {e}")
+            return False
 
-        self.anime_sama = config.get("scan-option", "anime-sama", fallback="True").lower() == "true"
-        self.franime = config.get("scan-option", "franime", fallback="False").lower() == "true"
-        self.as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
-        
-        self.seconds = int(config.get("settings", "timer", fallback="3600"))
-        self.logger = universal_logger("System", "sys.log")
-        
-        # Chemin pour stocker les résultats du planning
-        database_path = FolderConfig.find_path(folder_name="database")
-        self.planning_data_path = database_path / "planning_scan_data.json"
-        
-        self.run()
-    
+    def get_path(self, anime_langage, anime_season, anime_name, franime=False):
+        plex_path_json = FolderConfig.find_path(file_name="plex_path.json")
+        with open(plex_path_json, 'r', encoding='utf-8') as json_file:
+            data = json.load(json_file)
+
+        path_entries = [item for item in data if isinstance(item, dict) and 'path' in item and 'language' in item]
+
+        found_paths = []
+        for entry in path_entries:
+            if anime_langage in entry['language']:
+                found_paths.append(entry['path'])
+
+        if len(found_paths) > 1:
+            self.logger.warning(f"Plusieurs dossiers trouvés avec le langage '{anime_langage}'. Utilisation du premier dossier: {found_paths[0]}")
+            folder_name = found_paths[0]
+        elif len(found_paths) == 1:
+            folder_name = found_paths[0]
+        else:
+            folder_name = None
+
+        if folder_name is None:
+            self.logger.warning(f"Aucun dossier trouvé avec le langage '{anime_langage}'")
+            return None
+
+        plex_path = EnvConfig.get_env("plex_path")
+        download_path = FolderConfig.find_path(folder_name="download")
+
+        path_name = os.path.join(plex_path, folder_name)
+        season_name = f"season {anime_season}"
+        path_list = (folder_name, anime_name, season_name)
+        if franime == False:
+            episode_js = f"{download_path}/episode/{anime_name}-s{anime_season}-episode.js"
+        else:
+            episode_js = f"{download_path}/episode/{anime_name}-s{anime_season}-episode.json"
+
+        return path_name, path_list, episode_js, season_name, folder_name
 
     def get_france_time(self):
         paris_tz = pytz.timezone('Europe/Paris')
@@ -73,256 +78,682 @@ class streaming_manager:
             5: "samedi",
             6: "dimanche"
         }
+        self.logger.debug(f"France time: {jours_semaine[current_time.weekday()]}")
         return jours_semaine[current_time.weekday()]
-    
-    def timer(self, seconds):
+
+    def timer(self):
         timer_logger = universal_logger(name="Timer", log_file="sys.log")
         def format_time(seconds):
             hours, remainder = divmod(seconds, 3600)
             mins, secs = divmod(remainder, 60)
             return f'{hours:02d}:{mins:02d}:{secs:02d}'
 
+        config_path = FolderConfig.find_path(file_name="config.conf")
+        config = ConfigParser(allow_no_value=True)
+        config.read(config_path, encoding='utf-8')
+        seconds = int(config.get("settings", "timer", fallback="3600"))
+
         formatted_time = format_time(seconds)
         timer_logger.info(f"Starting timer : {formatted_time}")
-        
+
         counter = 0
         remaining_seconds = seconds
         while remaining_seconds > 0:
             time.sleep(1)
-            remaining_seconds -= 1 
+            remaining_seconds -= 1
             counter += 1
-            
+
             if counter >= 900:
                 formatted_time = format_time(remaining_seconds)
                 timer_logger.info(f"Time remaining : {formatted_time}")
                 counter = 0
-                
+
         timer_logger.info("Timer ended")
-    
-    def get_anime(self):
+
+    def get_anime(self, planning=False):
         try:
-            with open(self.anime_json, 'r') as file:
+            anime_json = FolderConfig.find_path(file_name="anime.json")
+            france_time = self.get_france_time()
+            with open(anime_json, 'r') as file:
                 data = json.load(file)
-                
+
                 anime_sama_list = []
                 franime_list = []
-                
-                def add_anime_to_list(anime):
+
+                def add_anime_to_list(anime, planning=False, day=None):
                     name = anime["name"]
                     season = anime["season"]
                     langage = anime["langage"]
                     file_name = anime["file_name"]
+                    jours_mapping = {"lundi": "0", "mardi": "1", "mercredi": "2", "jeudi": "3", "vendredi": "4", "samedi": "5", "dimanche": "6", "no_day": "7", "single_download": "8"}
                     if anime["streaming"] == "anime-sama":
-                        anime_sama_list.append((name, season, langage, file_name))
-                    """elif anime["streaming"] == "franime":
-                        franime_list.append((name, season, langage, file_name))
-                    """
-                
+                        if planning == False:
+                            anime_sama_list.append((name, season, langage, file_name))
+                        else:
+                            day = jours_mapping[day]
+                            anime_sama_list.append((name, season, langage, day))
+                    elif anime["streaming"] == "franime":
+                        if planning == False:
+                            franime_list.append((name, season, langage, file_name))
+                        else:
+                            day = jours_mapping[day]
+                            franime_list.append((name, season, langage, day))
+
+
                 for entry in data:
-                    if "auto_download" in entry:
-                        # Récupère les animes du jour actuel
-                        if self.france_time in entry["auto_download"]:
-                            for anime in entry["auto_download"][self.france_time]:
-                                add_anime_to_list(anime)
-                        
-                        # Ajoute les animes de no_day
-                        if "no_day" in entry["auto_download"]:
-                            for anime in entry["auto_download"]["no_day"]:
-                                add_anime_to_list(anime)
-                    
+                    if planning == False:
+                        if "auto_download" in entry:
+                            # Récupère les animes du jour actuel
+                            if france_time in entry["auto_download"]:
+                                for anime in entry["auto_download"][france_time]:
+                                    add_anime_to_list(anime, planning)
+                    else:
+                        for day in entry["auto_download"]:
+                            for anime in entry["auto_download"][day]:
+                                add_anime_to_list(anime, planning, day)
+                    # Ajoute les animes de no_day
+                    if "no_day" in entry["auto_download"]:
+                        for anime in entry["auto_download"]["no_day"]:
+                            add_anime_to_list(anime, planning, "no_day")
+
                     # Ajoute les single_download
                     if "single_download" in entry:
                         for anime in entry["single_download"]:
-                            add_anime_to_list(anime)
-                
-                return anime_sama_list,franime_list
+                            add_anime_to_list(anime, planning, "single_download")
+
+                return anime_sama_list, franime_list
         except FileNotFoundError:
-            self.logger.error(f"Fichier {self.anime_json} non trouvé.")
-            return []
+            self.logger.error(f"Fichier {anime_json} non trouvé.")
+            return [], []
         except json.JSONDecodeError as e:
-            self.logger.error(f"Erreur de décodage JSON pour {self.anime_json}: {str(e)}")
-            return []
+            self.logger.error(f"Erreur de décodage JSON pour {anime_json}: {str(e)}")
+            return [], []
         except Exception as e:
-            self.logger.error(f"Erreur inattendue lors de la lecture de {self.anime_json}: {str(e)}")
-            return []
+            self.logger.error(f"Erreur inattendue lors de la lecture de {anime_json}: {str(e)}")
+            import traceback
+            self.logger.debug(traceback.format_exc())
+            return [], []
+
+    class planning_scan:
+        def __init__(self):
+            self.logger = universal_logger(name="Planning Scan", log_file="sys.log")
+            self.function = function()
+            self.planning_status = {
+                "status": "idle",
+                "started_at": None,
+                "completed_at": None,
+                "error": None
+            }
+
+        def get_status(self):
+            return self.planning_status
+
+        def set_status(self, status, started_at=None, completed_at=None, error=None):
+            """Met à jour le statut du scan du planning et le sauvegarde dans le fichier"""
+            self.planning_status["status"] = status
+            if started_at:
+                self.planning_status["started_at"] = started_at
+            if completed_at:
+                self.planning_status["completed_at"] = completed_at
+            if error:
+                self.planning_status["error"] = error
+            if status == "idle":
+                self.planning_status["started_at"] = None
+                self.planning_status["completed_at"] = None
+                self.planning_status["error"] = None
+
+            # Sauvegarder le statut immédiatement dans le fichier
+            try:
+                folder_path = FolderConfig.find_path(file_name="planning_scan_data.json")
+                if folder_path.exists():
+                    with open(folder_path, 'r', encoding='utf-8') as file:
+                        data = json.load(file)
+                    data["status"] = dict(self.planning_status)
+                    with open(folder_path, 'w', encoding='utf-8') as file:
+                        json.dump(data, file, indent=4, ensure_ascii=False)
+            except Exception as e:
+                self.logger.warning(f"Impossible de sauvegarder le statut: {e}")
+
+        def save_planning_data(self, anime_sama_final_list, franime_final_list):
+            folder_path = FolderConfig.find_path(file_name="planning_scan_data.json")
+            data = []
+            if anime_sama_final_list:
+                data.extend(list(anime_sama_final_list))
+            if franime_final_list:
+                data.extend(list(franime_final_list))
+            scan_data = {
+                "results": data,
+                "status": dict(self.planning_status),
+                "total": len(data)
+            }
+            with open(folder_path, 'w', encoding='utf-8') as file:
+                json.dump(scan_data, file, indent=4, ensure_ascii=False)
+
+
+        class anime_sama:
+            def __init__(self, anime_sama_list, anime_sama_planning):
+                self.logger = universal_logger(name="Anime-sama", log_file="anime-sama.log")
+                self.anime_sama_list = anime_sama_list
+                self.anime_sama_planning = anime_sama_planning
+                self.anime_final_list = []
+
+            def run(self):
+                self.build_url()
+
+            def build_url(self):
+                self.url_list = []
+                for anime in self.anime_sama_list:
+                    name = anime[0]
+                    anime_sama_api.get_anime_details(name) #cache l'anime dans anime_details.json
+                    season = anime[1]
+                    langage = anime[2]
+                    day = anime[3]
+
+                    config_path = FolderConfig.find_path(file_name="config.conf")
+                    config = ConfigParser(allow_no_value=True)
+                    config.read(config_path, encoding='utf-8')
+                    base_url = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
+
+                    url = f"{base_url}/catalogue/{name}/saison{season}/{langage}/"
+                    json = {"name": name, "season": season, "langage": langage, "day": day, "url": url}
+
+                    self.url_list.append(json)
+                self.logger.debug(f"url_list: {self.url_list}")
+                self.compare_planning()
+
+            def compare_planning(self):
+                self.planning_list = []
+
+                for anime_item in self.url_list:  # anime_sama_url_list est une liste de dict
+                    name = anime_item["name"]
+                    day = anime_item["day"]
+                    season = anime_item["season"]
+                    langage = anime_item["langage"]
+                    url = anime_item["url"]
+
+                    # Jour 8 (single_download) n'existe pas dans le planning
+                    if day == "8":
+                        json_result = {
+                            "name": name,
+                            "season": season,
+                            "langage": langage,
+                            "url": url,
+                            "found": False,
+                            "anime_day": day,
+                            "planning_day": None
+                        }
+                    # Jours 0-7 : chercher l'URL dans tous les jours du planning
+                    elif day in ["0", "1", "2", "3", "4", "5", "6", "7"]:
+                        found = False
+                        planning_day_found = None
+
+                        # Chercher l'URL dans tous les jours du planning (0-7)
+                        for planning_day, planning_urls in self.anime_sama_planning.items():
+                            if url in planning_urls:
+                                found = True
+                                planning_day_found = planning_day
+                                break  # Trouvé, pas besoin de continuer
+
+                        json_result = {
+                            "name": name,
+                            "season": season,
+                            "langage": langage,
+                            "url": url,
+                            "found": found,
+                            "anime_day": day,
+                            "planning_day": planning_day_found
+                        }
+                    else:
+                        # Jour invalide
+                        json_result = {
+                            "name": name,
+                            "season": season,
+                            "langage": langage,
+                            "url": url,
+                            "found": False,
+                            "anime_day": day,
+                            "planning_day": None
+                        }
+                    self.planning_list.append(json_result)
+
+                self.logger.debug(f"planning_list: {self.planning_list}")
+                self.finalize_scan()
+
+            def finalize_scan(self):
+                for anime_item in self.planning_list:
+                    name = anime_item["name"]
+                    season = anime_item["season"]
+                    langage = anime_item["langage"]
+                    url = anime_item["url"]
+                    found = anime_item["found"]
+                    anime_day = anime_item["anime_day"]
+                    planning_day = anime_item["planning_day"]
+
+                    if found == True:
+                        if anime_day == planning_day:
+                            STATUS = "0"
+                        else:
+                            STATUS = "1"
+                    elif anime_day == "8":
+                        STATUS = "0"
+                    else:
+                        STATUS = "3"
+                    json = {"type": "anime-sama", "name": name, "season": season, "langage": langage, "url": url, "found": found, "anime_day": anime_day, "planning_day": planning_day, "status": STATUS}
+                    self.anime_final_list.append(json)
+                self.logger.debug(f"anime_list_json: {self.anime_final_list}")
+
+        class franime:
+            def __init__(self, franime_list, franime_planning):
+                self.logger = universal_logger(name="Franime", log_file="franime.log")
+                self.franime_list = franime_list
+                self.franime_planning = franime_planning
+                self.anime_final_list = []
+
+            def run(self):
+                self.compare_planning()
+
+            def compare_planning(self):
+                self.planning_list = []
+
+                # Mapping des langages : anime.json -> planning franime
+                # "vostfr" -> "vo", "vf" -> "vf", etc.
+                langage_mapping = {
+                    "vostfr": "vo",
+                    "vf": "vf",
+                    "vo": "vo"
+                }
+
+                for anime_item in self.franime_list:
+                    id_anime = anime_item[0]  # id_anime (name dans la liste)
+                    franime_api.get_anime_details(id_anime) #cache l'anime dans anime_details.json
+                    season = anime_item[1]
+                    langage = anime_item[2]
+                    day = anime_item[3]
+
+                    # Normaliser le langage pour la comparaison avec le planning
+                    langage_normalized = langage_mapping.get(langage, langage)
+
+                    # Jour 8 (single_download) n'existe pas dans le planning
+                    if day == "8":
+                        json_result = {
+                            "id_anime": id_anime,
+                            "season": season,
+                            "langage": langage,
+                            "found": False,
+                            "anime_day": day,
+                            "planning_day": None
+                        }
+                    # Jours 0-6 : chercher dans le planning (ignorer jour 7 car toujours vide)
+                    elif day in ["0", "1", "2", "3", "4", "5", "6"]:
+                        found = False
+                        planning_day_found = None
+
+                        # Chercher dans tous les jours du planning (0-6, ignorer 7)
+                        for planning_day in ["0", "1", "2", "3", "4", "5", "6"]:
+                            if planning_day in self.franime_planning:
+                                for planning_anime in self.franime_planning[planning_day]:
+                                    # Convertir id_anime en int pour la comparaison
+                                    planning_id = planning_anime.get("id_anime")
+                                    # Gérer le cas où id_anime peut être int ou string
+                                    try:
+                                        planning_id_int = int(planning_id) if planning_id is not None else None
+                                    except (ValueError, TypeError):
+                                        planning_id_int = planning_id
+
+                                    # Comparer id_anime, saison et lang (utiliser langage_normalized)
+                                    if (planning_id_int == int(id_anime) and
+                                        str(planning_anime.get("saison")) == str(season) and
+                                        planning_anime.get("lang") == langage_normalized):
+                                        found = True
+                                        planning_day_found = planning_day
+                                        self.logger.debug(f"Anime {id_anime} trouvé dans le planning au jour {planning_day}")
+                                        break
+                                if found:
+                                    break
+
+                        json_result = {
+                            "id_anime": id_anime,
+                            "season": season,
+                            "langage": langage,
+                            "found": found,
+                            "anime_day": day,
+                            "planning_day": planning_day_found
+                        }
+                    else:
+                        # Jour invalide
+                        json_result = {
+                            "id_anime": id_anime,
+                            "season": season,
+                            "langage": langage,
+                            "found": False,
+                            "anime_day": day,
+                            "planning_day": None
+                        }
+                    self.planning_list.append(json_result)
+
+                self.logger.debug(f"planning_list: {self.planning_list}")
+                self.finalize_scan()
+
+            def finalize_scan(self):
+                for anime_item in self.planning_list:
+                    id_anime = anime_item["id_anime"]
+                    season = anime_item["season"]
+                    langage = anime_item["langage"]
+                    found = anime_item["found"]
+                    anime_day = anime_item["anime_day"]
+                    planning_day = anime_item["planning_day"]
+                    config_path = FolderConfig.find_path(file_name="config.conf")
+                    config = ConfigParser(allow_no_value=True)
+                    config.read(config_path, encoding='utf-8')
+                    base_url = config.get("franime", "base_url", fallback="https://franime.fr")
+                    url = f"{base_url}/anime/Plex_anime_downloader?s={season}&ep=&lang={langage if langage == 'vostfr' else 'vo' if langage == 'vf' else langage}&anime_id={id_anime}"
+
+                    if found == True:
+                        if anime_day == planning_day:
+                            STATUS = "0"
+                        else:
+                            STATUS = "1"
+                    elif anime_day == "8":
+                        STATUS = "0"
+                    else:
+                        STATUS = "3"
+                    json = {"type": "franime", "id_anime": id_anime, "season": season, "langage": langage, "url": url, "found": found, "anime_day": anime_day, "planning_day": planning_day, "status": STATUS}
+                    self.anime_final_list.append(json)
+                self.logger.debug(f"anime_list_json: {self.anime_final_list}")
+
+        def run(self):
+            try:
+                current_status = self.get_status()
+                if current_status.get("status") == "running":
+                    self.logger.debug("Un scan des planning est déjà en cours, on skip")
+                    return
+                self.logger.info("Démarrage du scan des planning")
+
+                self.set_status("running", started_at=datetime.now().isoformat())
+
+                anime_sama_planning = anime_sama_api.get_panning()
+                franime_planning = franime_api.get_panning()
+
+                anime_sama_list, franime_list = self.function.get_anime(planning=True)
+
+                AS_scan = self.anime_sama(anime_sama_list, anime_sama_planning)
+                AS_scan.run()
+
+                FR_scan = self.franime(franime_list, franime_planning)
+                FR_scan.run()
+
+                self.set_status("completed", completed_at=datetime.now().isoformat())
+                self.save_planning_data(AS_scan.anime_final_list, FR_scan.anime_final_list)
+                self.logger.info("Scan des planning terminé")
+
+            except Exception as e:
+                self.logger.error(f"Erreur lors du scan des planning: {e}")
+                self.set_status("error", error=str(e))
+                return
+
+class stream_manager:
+    def __init__(self, queue):
+        self.logger = universal_logger(name="Stream Manager", log_file="sys.log")
+        self.function = function()
+        self.queue = queue
+
+        self.run()
 
     def run(self):
-        # Lancer un scan du planning au démarrage (synchrone, le code attend la fin)
-        self._run_planning_scan()
-        
         while True:
-            self.france_time = self.get_france_time()
+            config_path = FolderConfig.find_path(file_name="config.conf")
+            config = ConfigParser(allow_no_value=True)
+            config.read(config_path, encoding='utf-8')
 
-            anime_sama_list, franime_list = self.get_anime()
-            franime_list = False # remove this line when franime is ready
+            flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
+            if flaresolver_use == "true":
+                if self.function.try_flaresolver() == False:
+                    self.logger.error("Flaresolver est pas accessible, on skip")
+                    flaresolver_use = "false"
+            else:
+                self.logger.info("Flaresolver est désactivé, on skip")
+                flaresolver_use = "false"
 
-            # Lancer un scan du planning au début de chaque cycle (synchrone, le code attend la fin)
-            self._run_planning_scan()
+            planning_scan = self.function.planning_scan()
+            planning_scan.run()
 
-            if self.anime_sama == True:
-                self.logger.info(msg="Anime-Sama scan started")
-                log = universal_logger(name="Anime-Sama", log_file="anime-sama.log")
-                if anime_sama_list:
-                    queue_list = []
-                    for anime in anime_sama_list:
-                        name, season, langage, file_name = anime
-                        if file_name == "none":
-                            file_name = name
-                        
-                        # Vérifier si season est au format "x-y" (ex: "1-2", "1-3", "3-2")
-                        part_season_pattern = r'^\d+-\d+$'
-                        if re.match(part_season_pattern, str(season)):
-                            # Extraire le début et la fin
-                            season_parts = season.split('-')
-                            season_base = int(season_parts[0])  # Premier nombre (toujours utilisé comme base)
-                            nombre_parts = int(season_parts[1])  # Deuxième nombre (nombre de parts à créer)
-                            
-                            # Créer une liste d'URLs numérotées (1, 2, 3, 4, 5, etc.)
-                            # Exemple: 1-3 → base=1, nombre_parts=3 → génère: saison1, saison1-2, saison1-3
-                            # Exemple: 3-2 → base=3, nombre_parts=2 → génère: saison3, saison3-2
-                            url_list = []
-                            for current_season in range(1, nombre_parts + 1):
-                                if current_season == 1:
-                                    # Si c'est la première itération, utiliser juste saison{base} (sans -1)
-                                    url = f"{self.as_baseurl}/catalogue/{name}/saison{season_base}/{langage}/episodes.js"
-                                    season_for_object = season_base
-                                else:
-                                    # Sinon, utiliser saison{base}-{current_season}
-                                    url = f"{self.as_baseurl}/catalogue/{name}/saison{season_base}-{current_season}/{langage}/episodes.js"
-                                    season_for_object = f"{season_base}-{current_season}"
-                                
-                                # Ajouter à la liste avec un numéro (1, 2, 3, etc.)
-                                url_list.append(url)
-                            
-                            # Traiter avec la liste d'URLs (utiliser season_base comme season_for_object)
-                            AS = anime_sama(anime_name=file_name, anime_url=url_list, anime_season=season_base, anime_langage=langage, plex_path=self.plex_path, download_path=self.download_path)
-                            queue = AS.run()
-                            if queue:
-                                queue_list.append(queue)
-                            else:
-                                log.info(f"{name} tous les épisodes sont déjà installés ou aucun nouveau épisode disponible")
-                        else:
-                            # Si ce n'est pas un format de plage, traiter normalement
-                            url = f"{self.as_baseurl}/catalogue/{name}/saison{season}/{langage}/episodes.js"
-                            AS = anime_sama(anime_name=file_name, anime_url=url, anime_season=season, anime_langage=langage, plex_path=self.plex_path, download_path=self.download_path)
-                            queue = AS.run()
-                            if queue:
-                                queue_list.append(queue)
-                            else:
-                                log.info(f"{name} tous les épisodes sont déjà installés ou aucun nouveau épisode disponible")
-                    for queue in queue_list:
-                        for episode_name, path, episode_url in queue:
-                            self.queue.add_to_queue(episode_name=episode_name, path=path, episode_urls=episode_url)
-            self.timer(seconds=self.seconds)
-    
-    def _run_planning_scan(self):
-        """Lance un scan du planning et sauvegarde les résultats"""
-        try:
-            # Vérifier si un scan est déjà en cours
-            current_status = get_planning_scan_status()
-            if current_status.get("status") == "running":
-                self.logger.debug("Un scan du planning est déjà en cours, on skip")
-                return
-            
-            # Marquer le scan comme en cours
-            set_planning_scan_status("running", started_at=datetime.now().isoformat())
-            
-            from .function.anime_sama import anime_sama_planning
-            from .api.anime_sama_api import extract_anime_info
-            
-            self.logger.info("Démarrage du scan du planning...")
-            planning = anime_sama_planning()
-            results = planning.run()
-            
-            # Enrichir les résultats avec les infos (nom réel et image)
-            enriched_results = []
-            for anime in results:
-                name = anime.get("name")
-                if name:
-                    try:
-                        info = extract_anime_info(name)
-                        if info:
-                            anime["real_name"] = info.get("titreOeuvre", name)
-                            anime["image"] = info.get("imgOeuvre", "")
-                        else:
-                            anime["real_name"] = name
-                            anime["image"] = ""
-                    except:
-                        anime["real_name"] = name
-                        anime["image"] = ""
+            anime_sama_list, franime_list = self.function.get_anime(planning=False)
+
+            anime_sama_scan = config.get("scan-option", "anime-sama", fallback="False")
+            franime_scan = config.get("scan-option", "franime", fallback="False")
+
+            if anime_sama_scan == "True":
+                anime_sama(anime_sama_list, self.queue)
+
+            if flaresolver_use == "true":
+                if franime_scan == "True":
+                    franime(franime_list, self.queue)
+
+            self.function.timer()
+
+class anime_sama:
+    def __init__(self, anime_sama_list, queue):
+        self.logger = universal_logger(name="Anime-sama", log_file="anime-sama.log")
+
+        config_path = FolderConfig.find_path(file_name="config.conf")
+        self.download_path = FolderConfig.find_path(folder_name="download")
+        config = ConfigParser(allow_no_value=True)
+        config.read(config_path, encoding='utf-8')
+
+        self.anime_sama_base_url = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
+        self.anime_sama_auto_delete = config.get("anime_sama", "auto_delete", fallback="true")
+        self.flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
+
+        self.function = function()
+        self.anime_sama_list = anime_sama_list
+        self.queue = queue
+
+        self.run()
+
+    def find_part_season(self, name, season, langage):
+        url_list = []
+        part_season_pattern = r'^\d+-\d+$'
+        if re.match(part_season_pattern, str(season)):
+            # Extraire le début et la fin
+            season_parts = season.split('-')
+            season_base = int(season_parts[0])  # Premier nombre (toujours utilisé comme base)
+            nombre_parts = int(season_parts[1])  # Deuxième nombre (nombre de parts à créer)
+
+            # Créer une liste d'URLs numérotées (1, 2, 3, 4, 5, etc.)
+            # Exemple: 1-3 → base=1, nombre_parts=3 → génère: saison1, saison1-2, saison1-3
+            # Exemple: 3-2 → base=3, nombre_parts=2 → génère: saison3, saison3-2
+            for current_season in range(1, nombre_parts + 1):
+                if current_season == 1:
+                    # Si c'est la première itération, utiliser juste saison{base} (sans -1)
+                    url = f"{self.anime_sama_base_url}/catalogue/{name}/saison{season_base}/{langage}/episodes.js"
                 else:
-                    anime["real_name"] = "N/A"
-                    anime["image"] = ""
-                
-                # Déterminer le statut pour la couleur
-                found = anime.get("found", False)
-                anime_day = anime.get("anime_day")
-                day_id = anime.get("day_id")
-                episodes_complete = anime.get("episodes_complete")
-                status = anime.get("status")  # Pour single_download, le status est déjà défini
-                
-                # Si le status est déjà défini (pour single_download), on l'utilise
-                if status and status in ["green", "yellow", "red"]:
-                    anime["status"] = status
-                elif not found:
-                    if episodes_complete is True:
-                        anime["status"] = "green"
-                    elif episodes_complete is False:
-                        anime["status"] = "yellow"
+                    # Sinon, utiliser saison{base}-{current_season}
+                    url = f"{self.anime_sama_base_url}/catalogue/{name}/saison{season_base}-{current_season}/{langage}/episodes.js"
+                # Ajouter à la liste avec un numéro (1, 2, 3, etc.)
+                url_list.append(url)
+            return url_list
+
+    def run(self):
+        for anime in self.anime_sama_list:
+            name = anime[0]
+            season = anime[1]
+            langage = anime[2]
+            file_name = anime[3]
+            if file_name == "none":
+                file_name = name
+            self.logger.info(f"traitement de {file_name} - s{season} - {langage}")
+
+            path_result = self.function.get_path(langage, season, file_name)
+            if path_result is None:
+                continue
+
+            path_name, path_list, episode_js, season_name, folder_name = path_result
+
+            url_list = self.find_part_season(name, season, langage)
+            if url_list:
+                episode_js = []
+                for i, (url) in enumerate(url_list):
+                    episode_js_part = f"{self.download_path}/episode/{file_name}-s{season}-part{i+1}.js"
+                    status = anime_sama_api.get_episode_js(file_name, url, episode_js_part)
+                    if status:
+                        episode_js.append(episode_js_part)
                     else:
-                        anime["status"] = "red"
-                elif anime_day == day_id:
-                    anime["status"] = "normal"
-                else:
-                    anime["status"] = "normal"
-                
-                enriched_results.append(anime)
-            
-            # Sauvegarder les résultats
-            scan_data = {
-                "results": enriched_results,
-                "scan_date": datetime.now().isoformat(),
-                "total": len(enriched_results)
-            }
-            with open(self.planning_data_path, 'w', encoding='utf-8') as f:
-                json.dump(scan_data, f, indent=2, ensure_ascii=False)
-            
-            # Marquer le scan comme terminé
-            current_status = get_planning_scan_status()
-            set_planning_scan_status(
-                "completed",
-                started_at=current_status.get("started_at"),
-                completed_at=datetime.now().isoformat()
-            )
-            
-            self.logger.info(f"Scan du planning terminé: {len(enriched_results)} animes traités")
-        except Exception as e:
-            self.logger.error(f"Erreur lors du scan du planning: {e}")
-            # Marquer le scan comme erreur
-            current_status = get_planning_scan_status()
-            set_planning_scan_status(
-                "error",
-                started_at=current_status.get("started_at"),
-                error=str(e)
-            )
-        """    if FR_Anime == True:
-                self.logger.info(msg="FRAnime scan started")
-                log = universal_logger(name="FRAnime", log_file="franime.log")
-                if franime_list:
-                    for anime in franime_list:
-                        name, season, langage, file_name = anime
-                        if file_name == "none":
-                            file_name = name
-                        FR = franime(anime_name=name, file_name=file_name, anime_season=season, anime_langage=langage, plex_path=self.plex_path, download_path=self.download_path)
-                        queue = FR.run()
-                        if queue:
-                            queue_list.append(queue)
-                        else:
-                            log.warning(f"{name} n'a pas été trouvé")
-                    for queue in queue_list:
-                        for episode_name, path, episode_url in queue:
-                            self.queue.add_to_queue(episode_name=episode_name, path=path, episode_urls=episode_url)
-            self.timer(seconds=self.seconds)
-        """
+                        self.logger.debug(f"Erreur lors du téléchargement du fichier JS pour {file_name} - {season} - {langage}")
+            else:
+                url = f"{self.anime_sama_base_url}/catalogue/{file_name}/saison{season}/{langage}/episodes.js"
+                status = anime_sama_api.get_episode_js(file_name, url, episode_js)
+                if status == False:
+                    self.logger.debug(f"Erreur lors du téléchargement du fichier JS pour {file_name} - {season} - {langage}")
+
+            # Utiliser la classe get_anime_episodes_url pour extraire et sauvegarder les épisodes
+            anime_sama_api.get_anime_episodes_url(path_list, episode_js)
+
+            db = anime_data_database()
+            unistalled_episode = db.get_unistalled_episode(path_list)
+
+            if unistalled_episode:
+                for episode_name, episode_url in unistalled_episode:
+                    self.logger.info(f"nouveaux episode detecté: {episode_name}")
+                    episode_path = f"{path_name}/{file_name}/{season_name}/{episode_name}"
+                    path = (episode_path, folder_name, file_name, season_name)
+                    self.queue.add_to_queue(episode_name=episode_name, path=path, episode_urls=episode_url)
+            else:
+                self.logger.info(f"Aucun nouvel episode detecté pour {file_name} - s{season} - {langage}")
+
+                # Mettre à jour planning_scan_data.json
+                planning_scan_data = FolderConfig.find_path(file_name="planning_scan_data.json")
+                with open(planning_scan_data, 'r') as file:
+                    planning_data = json.load(file)
+
+                # Chercher et mettre à jour l'item dans results
+                item_found = None
+                if "results" in planning_data:
+                    for item in planning_data["results"]:
+                        if item.get("name") == name and item.get("found") == False:
+                            item["status"] = "2"
+                            item_found = item
+                            break
+
+                # Si auto_delete activé, retirer l'item et supprimer de anime.json
+                if self.anime_sama_auto_delete == "true" and item_found:
+                    self.logger.info(f"Suppression de {file_name} - s{season} - {langage}")
+                    planning_data["results"].remove(item_found)
+                    planning_data["total"] = len(planning_data["results"])
+
+                    # Retirer de anime.json
+                    anime_json = FolderConfig.find_path(file_name="anime.json")
+                    with open(anime_json, 'r') as file:
+                        anime_data = json.load(file)
+
+                    for entry in anime_data:
+                        if "auto_download" in entry:
+                            for day in entry["auto_download"]:
+                                entry["auto_download"][day] = [a for a in entry["auto_download"][day] if a.get("name") != name]
+                        if "single_download" in entry:
+                            entry["single_download"] = [a for a in entry["single_download"] if a.get("name") != name]
+
+                    with open(anime_json, 'w') as file:
+                        json.dump(anime_data, file, indent=4, ensure_ascii=False)
+
+                    # Sauvegarder planning_scan_data.json
+                    with open(planning_scan_data, 'w') as file:
+                        json.dump(planning_data, file, indent=4, ensure_ascii=False)
 
 
+class franime:
+    def __init__(self, franime_list, queue):
+        self.logger = universal_logger(name="Franime", log_file="franime.log")
+
+        config_path = FolderConfig.find_path(file_name="config.conf")
+        self.download_path = FolderConfig.find_path(folder_name="download")
+        config = ConfigParser(allow_no_value=True)
+        config.read(config_path, encoding='utf-8')
+
+        self.franime_base_url = config.get("franime", "base_url", fallback="https://franime.fr")
+        self.franime_auto_delete = config.get("franime", "auto_delete", fallback="true")
+        self.flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
+
+        self.function = function()
+        self.franime_list = franime_list
+        self.queue = queue
+
+        self.timer_on = False
+        self.timer_thread = None
+
+        self.run()
+
+    def run(self):
+        for anime in self.franime_list:
+            name = anime[0]
+            season = anime[1]
+            langage = anime[2]
+            if langage == "vostfr":
+                frlang = "vo"
+            elif langage == "vf":
+                frlang = "vf"
+            file_name = anime[3]
+            if file_name == "none":
+                file_name = name
+            self.logger.info(f"traitement de {file_name} - s{season} - {langage}")
+
+            path_result = self.function.get_path(langage, season, file_name, franime=True)
+            if path_result is None:
+                continue
+
+            path_name, path_list, episode_js, season_name, folder_name = path_result
+
+            franime = franime_api.get_anime_episodes_url(path_list, episode_js, name, season, frlang, self.timer_on, self.timer_thread)
+            ban = franime.run()
+            if ban:
+                break
+
+            db = anime_data_database()
+            unistalled_episode = db.get_unistalled_episode(path_list)
+
+            if unistalled_episode:
+                for episode_name, episode_url in unistalled_episode:
+                    self.logger.info(f"nouveaux episode detecté: {episode_name}")
+                    episode_path = f"{path_name}/{file_name}/{season_name}/{episode_name}"
+                    path = (episode_path, folder_name, file_name, season_name)
+                    self.queue.add_to_queue(episode_name=episode_name, path=path, episode_urls=episode_url)
+            else:
+                self.logger.info(f"Aucun nouvel episode detecté pour {file_name} - s{season} - {langage}")
+
+                # Mettre à jour planning_scan_data.json
+                planning_scan_data = FolderConfig.find_path(file_name="planning_scan_data.json")
+                with open(planning_scan_data, 'r') as file:
+                    planning_data = json.load(file)
+
+                # Chercher et mettre à jour l'item dans results
+                item_found = None
+                if "results" in planning_data:
+                    for item in planning_data["results"]:
+                        if item.get("name") == name and item.get("found") == False:
+                            item["status"] = "2"
+                            item_found = item
+                            break
+
+                # Si auto_delete activé, retirer l'item et supprimer de anime.json
+                if self.franime_auto_delete == "true" and item_found:
+                    self.logger.info(f"Suppression de {file_name} - s{season} - {langage}")
+                    planning_data["results"].remove(item_found)
+                    planning_data["total"] = len(planning_data["results"])
+
+                    # Retirer de anime.json
+                    anime_json = FolderConfig.find_path(file_name="anime.json")
+                    with open(anime_json, 'r') as file:
+                        anime_data = json.load(file)
+
+                    for entry in anime_data:
+                        if "auto_download" in entry:
+                            for day in entry["auto_download"]:
+                                entry["auto_download"][day] = [a for a in entry["auto_download"][day] if a.get("name") != name]
+                        if "single_download" in entry:
+                            entry["single_download"] = [a for a in entry["single_download"] if a.get("name") != name]
+
+                    with open(anime_json, 'w') as file:
+                        json.dump(anime_data, file, indent=4, ensure_ascii=False)
+
+                    # Sauvegarder planning_scan_data.json
+                    with open(planning_scan_data, 'w') as file:
+                        json.dump(planning_data, file, indent=4, ensure_ascii=False)
