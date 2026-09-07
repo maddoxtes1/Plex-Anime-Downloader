@@ -20,11 +20,6 @@ _ENV_CONFIG = {
         "default": "change-moi",
         "type": str
     },
-    "news_api_url": {
-        "env_var": "NEWS_API_URL",
-        "default": "https://newspad.maddoxserv.com/api/news",
-        "type": str
-    },
     "app_secret_key": {
         "env_var": "FLASK_SECRET_KEY",
         "default": "change-me-en-production",
@@ -119,8 +114,7 @@ _File_Config = {
     ".env": {
         "type": "env",
         "default": {
-            "Version": "Beta-0.8.0",
-            "Server_ID": "none",
+            "Version": "Beta-0.8.0"
         }
     },
     "config.conf": {
@@ -176,35 +170,35 @@ def create_users_db(db_path):
     """
     Initialise la base de données users.db.
     Vérifie si le fichier existe et s'il est valide, le crée ou le recrée si nécessaire.
-    
+
     Args:
         db_path: Chemin complet vers le fichier users.db
-        
+
     Returns:
         bool: True si l'initialisation a réussi, False sinon
     """
     import sqlite3
     import os
     from app.sys.system import universal_logger
-    
+
     logger = universal_logger("UsersDB", "sys.log")
-    
+
     # Créer le dossier parent si nécessaire
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    
+
     # Récupérer la définition SQL depuis _File_Config
-    create_table_sql = _File_Config.get("users.db", {}).get("default", 
+    create_table_sql = _File_Config.get("users.db", {}).get("default",
         "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL);")
-    
+
     # Ajouter "IF NOT EXISTS" si ce n'est pas déjà présent
     if "IF NOT EXISTS" not in create_table_sql.upper():
         create_table_sql = create_table_sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
-    
+
     # Vérifier si le fichier existe et s'il est une base de données SQLite valide
     db_exists = os.path.exists(db_path)
     db_valid = False
     table_exists = False
-    
+
     if db_exists:
         try:
             # Tenter de se connecter et de vérifier que c'est une base SQLite valide
@@ -224,7 +218,7 @@ def create_users_db(db_path):
             except Exception as e:
                 logger.error(f"Impossible de supprimer le fichier users.db corrompu: {e}")
                 return False
-    
+
     # Créer la base de données et la table si nécessaire
     if not db_exists or not db_valid or not table_exists:
         try:
@@ -244,7 +238,7 @@ def create_users_db(db_path):
         except Exception as e:
             logger.error(f"Erreur lors de la création de users.db: {e}")
             return False
-    
+
     return True
 
 
@@ -253,7 +247,7 @@ def create_plex_path(plexpath_file=None, plexpath=None, database_path=None):
     Script pour initialiser/mettre à jour plex_path.json.
     Détecte automatiquement les dossiers dans le répertoire Plex.
     Synchronise également avec plex_database.json.
-    
+
     Args:
         plexpath_file: Chemin complet du fichier plex_path.json (Path)
         plexpath: Chemin du dossier Plex
@@ -267,7 +261,7 @@ def create_plex_path(plexpath_file=None, plexpath=None, database_path=None):
     plex_path = plexpath
     file_path = Path(plexpath_file)
 
-    
+
     # Lire le contenu existant du fichier (ou initialiser si vide/inexistant)
     existing_data = []
     if file_path.exists() and file_path.stat().st_size > 0:
@@ -277,10 +271,10 @@ def create_plex_path(plexpath_file=None, plexpath=None, database_path=None):
         except (json.JSONDecodeError, ValueError):
             # Si le fichier est corrompu, initialiser avec une liste vide
             existing_data = []
-    
+
     # Filtrer les commentaires et récupérer les chemins
     paths_data = [item for item in existing_data if "_comment" not in item and isinstance(item, dict)]
-    
+
     # Vérifier les dossiers existants et ne garder que ceux qui existent toujours
     updated_paths = []
     for item in paths_data:
@@ -288,7 +282,7 @@ def create_plex_path(plexpath_file=None, plexpath=None, database_path=None):
             full_path = os.path.join(plex_path, item['path'])
             if os.path.exists(full_path) and os.path.isdir(full_path):
                 updated_paths.append(item)
-    
+
     # Ajouter les nouveaux dossiers trouvés dans le répertoire
     existing_paths = [item['path'] for item in updated_paths if item.get('path')]
     try:
@@ -299,23 +293,23 @@ def create_plex_path(plexpath_file=None, plexpath=None, database_path=None):
                     updated_paths.append({"path": item, "language": ["disable"]})
     except Exception:
         pass
-    
+
     # Sauvegarder les modifications
     with open(file_path, 'w', encoding='utf-8') as json_file:
         json.dump(updated_paths, json_file, indent=4, ensure_ascii=False)
-    
+
     # Initialiser la base de données
     db = anime_data_database(database_path=database_path)
-    
+
     # Récupérer les chemins existants dans la base de données
     existing_db_paths = db.get_existing_path()
-    
+
     # Supprimer les chemins qui n'existent plus dans plex_path.json
     paths_in_file = [item.get('path') for item in updated_paths if item.get('path')]
     for path in existing_db_paths:
         if path not in paths_in_file:
             db.delete_path(path)
-    
+
     # Ajouter les nouveaux chemins (uniquement ceux qui ne sont pas "disable")
     for item in updated_paths:
         if item.get('path') and not item.get("_comment"):
@@ -335,18 +329,18 @@ def auto_env(env_file=None):
     """
     import uuid
     from pathlib import Path
-    
+
     try:
         env_path = Path(env_file) if env_file else None
-        
+
         if not env_path:
             return
-        
+
         # Créer le fichier .env s'il n'existe pas
         if not env_path.exists():
             env_path.parent.mkdir(parents=True, exist_ok=True)
             env_path.touch()
-        
+
         # Lire le fichier .env
         env_vars = {}
         if env_path.exists():
@@ -360,32 +354,26 @@ def auto_env(env_file=None):
                     if '=' in line:
                         key, value = line.split('=', 1)
                         env_vars[key.strip()] = value.strip()
-        
-        # Vérifier et générer le Server_ID si nécessaire
-        current_server_id = env_vars.get('Server_ID', 'none')
-        if current_server_id == "none" or not current_server_id:
-            new_server_id = str(uuid.uuid4())
-            env_vars['Server_ID'] = new_server_id
-        
+
         # Récupérer la version actuelle depuis _ENV_CONFIG
         from .system import EnvConfig
         current_version = EnvConfig.get_env("plex_anime_downloader_V")
-        
+
         # Récupérer la version dans le fichier .env
         env_version = env_vars.get('Version', '')
-        
+
         # Vérifier si les versions sont différentes
         version_changed = False
         if env_version != current_version:
             version_changed = True
             # Mettre à jour la version dans le fichier
             env_vars['Version'] = current_version
-        
+
         # Réécrire le fichier .env avec les modifications
         with open(env_path, 'w', encoding='utf-8') as f:
             for key, value in env_vars.items():
                 f.write(f"{key}={value}\n")
-        
+
         # Si la version a changé, lancer le script de migration
         if version_changed:
             try:
