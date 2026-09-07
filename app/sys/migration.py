@@ -159,6 +159,103 @@ _MIGRATIONS = {
                 "remove_from_source": True
             }
         ]
+    },
+    "Beta-0.8.0": {
+        "description": "Migration vers Beta-0.8.0 - Ajout de auto_delete dans config.conf et déplacement de auto_planning dans la section anime_sama",
+        "changes": [
+            {
+                "type": "add_key",
+                "description": "ajouter auto_delete dans la section anime_sama de config.conf",
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "anime_sama",
+                    "key": "auto_delete"
+                },
+                "default_value": "True"
+            },
+            {
+                "type": "move_value",
+                "description": "Déplacer auto_planning de la section anime_sama vers la section anime_sama de config.conf",
+                "source": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "anime_sama",
+                    "key": "auto_planning"
+                },
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "anime_sama",
+                    "key": "auto_delete"
+                },
+                "remove_from_source": True
+            },
+            {
+                "type": "add_section",
+                "description": "Ajout de la section franime de config.conf",
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "franime"
+                }
+            },
+            {
+                "type": "add_key",
+                "description": "ajouter base_url dans la section franime de config.conf",
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "franime",
+                    "key": "base_url"
+                },
+                "default_value": "https://franime.fr"
+            },
+            {
+                "type": "add_key",
+                "description": "ajouter api_base_url dans la section franime de config.conf",
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "franime",
+                    "key": "api_base_url"
+                },
+                "default_value": "https://api.franime.fr"
+            },
+            {
+                "type": "add_key",
+                "description": "ajouter auto_delete dans la section franime de config.conf",
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "franime",
+                    "key": "auto_delete"
+                },
+                "default_value": "True"
+            },
+            {
+                "type": "add_key",
+                "description": "ajouter flaresolver_host dans la section franime de config.conf",
+                "target": {
+                    "file": "config.conf",
+                    "type": "configparser",
+                    "section": "franime",
+                    "key": "flaresolver_host"
+                },
+                "default_value": "flaresolver"
+            },
+            {
+                "type": "add_key",
+                "description": "ajouter flaresolver_port dans la section franime de config.conf",
+                "target": {
+                    "file": "config.conf",  
+                    "type": "configparser",
+                    "section": "franime",
+                    "key": "flaresolver_port"
+                },
+                "default_value": 8191
+            }
+        ]
     }
 }
 
