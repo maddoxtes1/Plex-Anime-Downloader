@@ -262,6 +262,21 @@ class anime_data_database(BaseDatabase):
 
         return episodes
 
+    def update_episode_status(self, path_name, series_name, season_name, episode_name, episode_status):
+        data = self._read_database()
+        if self._verify_season(data, path_name, series_name, season_name):
+            if episode_name not in data[path_name][series_name][season_name]:
+                self.logger.debug(f"Episode {episode_name} existe pas")
+                return
+
+            episode_data = data[path_name][series_name][season_name][episode_name]
+            data[path_name][series_name][season_name][episode_name] = {
+                "status": episode_status,
+                "url": episode_data.get("url", "")
+            }
+            self.save_database(data)
+            self.logger.debug(f"le status a ete update pour cette episode {episode_status}")
+
     def get_unistalled_episode(self, path_list):
         """
         Récupère tous les épisodes non téléchargés (status = "not_downloaded") d'une saison.
