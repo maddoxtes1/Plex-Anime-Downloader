@@ -11,3 +11,4 @@ franime.py
 franime_api.py
 patchnote
 __pycache__/
+flask/
