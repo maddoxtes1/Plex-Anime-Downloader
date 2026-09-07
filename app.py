@@ -8,14 +8,14 @@ class App:
         FolderConfig.init()
         LoggerConfig.init()
         self.logger = universal_logger("System", "sys.log")
-    
+
     def run(self):
         queue_manager = queues()
         self.logger.info(msg="Queue manager initialized")
-        
+
         flask_manager()
         self.logger.info(msg="Flask manager initialized")
-        
+
         stream_manager(queue=queue_manager)
         self.logger.info(msg="Streaming manager initialized")
 
