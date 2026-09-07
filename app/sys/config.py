@@ -1,7 +1,7 @@
 _ENV_CONFIG = {
     "plex_anime_downloader_V": {
         "env_var": "PLEX_ANIME_DOWNLOADER_V",
-        "default": "Beta-0.7.0",
+        "default": "Beta-0.8.0",
         "type": str,
         "use_default": True
     },
@@ -48,8 +48,11 @@ _Folder_Config = {
         "path": f";datapath;/database",
         "type": "normal",
         "file": {
-            "plex_database.json": {
-                "default_content": "plex_database.json"
+            "anime_data.json": {
+                "default_content": "anime_data.json"
+            },
+            "anime_details.json": {
+                "default_content": "anime_details.json"
             },
             "users.db": {
                 "default_content": "none",
@@ -84,7 +87,7 @@ _Folder_Config = {
                 "file_script_params": {
                     "plexpath": ";plex_path;",
                     "plexpath_file": ":plex_path.json:",
-                    "database_path": ":plex_database.json:"
+                    "database_path": ":anime_data.json:"
                 }
             },
             "anime.json": {
@@ -105,14 +108,18 @@ _Folder_Config = {
 }
 
 _File_Config = {
-    "plex_database.json": {
+    "anime_data.json": {
+        "type": "json",
+        "default": {}
+    },
+    "anime_details.json": {
         "type": "json",
         "default": {}
     },
     ".env": {
         "type": "env",
         "default": {
-            "Version": "Beta-0.7.0",
+            "Version": "Beta-0.8.0",
             "Server_ID": "none",
         }
     },
@@ -126,13 +133,23 @@ _File_Config = {
                 "news": "True",
                 "log_level": "INFO"
             },
+            "flaresolver": {
+                "host": "flaresolver",
+                "port": 8191,
+                "use_flaresolver": True,
+            },
             "scan-option": {
                 "anime-sama": True,
                 "franime": False
             },
             "anime_sama": {
                 "base_url": "https://anime-sama.tv",
-                "auto_planning": True,
+                "auto_delete": True
+            },
+            "franime": {
+                "base_url": "https://franime.fr",
+                "api_base_url": "https://api.franime.fr",
+                "auto_delete": True,
             }
             }
     },
@@ -245,7 +262,7 @@ def create_plex_path(plexpath_file=None, plexpath=None, database_path=None):
     import os
     from pathlib import Path
     # Import absolu pour éviter les problèmes de contexte d'exécution
-    from app.sys.database import database
+    from app.sys.database import anime_data_database
 
     plex_path = plexpath
     file_path = Path(plexpath_file)
@@ -288,7 +305,7 @@ def create_plex_path(plexpath_file=None, plexpath=None, database_path=None):
         json.dump(updated_paths, json_file, indent=4, ensure_ascii=False)
     
     # Initialiser la base de données
-    db = database(database_path=database_path)
+    db = anime_data_database(database_path=database_path)
     
     # Récupérer les chemins existants dans la base de données
     existing_db_paths = db.get_existing_path()
