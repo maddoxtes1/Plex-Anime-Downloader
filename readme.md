@@ -1,25 +1,40 @@
-# Description 
+# Plex Anime Downloader
 
-J'ai un serveur Plex et j'aime les animes. J'avais la flemme de télécharger manuellement mes animes, du coup j'ai créé cette application Docker.
+Plex Anime Downloader est une petite application permettant de télécharger facilement des animes et de les organiser dans une bibliothèque Plex, Jellyfin ou Emby.
 
-## Fonctionnalités du projet
+J'utilise personnellement un serveur Plex/Jellyfin/Emby et j'aime beaucoup les animes. Je trouvais que mettre en place une solution complète avec Sonarr + qBittorrent était un peu compliqué pour quelque chose d'aussi simple.
 
-- ✅ Télécharger automatiquement les animes
-- ✅ Télécharger depuis plusieurs sites de streaming (Anime-sama, Franime)
-- ❌ Support d'un VPN pour les téléchargements
+J'ai donc créé ce projet avec une interface web permettant de rechercher et télécharger des animes plus facilement.
 
-## Prérequis
+## ✨ Fonctionnalités
 
-- Docker installé sur votre système
+- ✅ Téléchargement automatique des animes
+- ✅ Téléchargement depuis plusieurs sites de streaming
+  - Anime-Sama
+  - Franime
+- ✅ Interface web pour gérer les téléchargements
+- ✅ Organisation des fichiers pour Plex/Emby
 
-⚠️ **Note importante** : Si vous avez une bibliothèque Jellyfin, vous allez probablement rencontrer des problèmes avec la détection des animes et des episode. 
-si vous utiliser Emby ou Plex il aura pas de probleme 
+## 📺 Compatibilité
 
-# Installation
+L'application peut être utilisée avec :
 
-## Méthode rapide avec Docker Compose
+- 🟢 Plex
+- 🟢 Emby
+- 🟡 Jellyfin
 
-### 1. Créer un fichier docker-compose.yml
+> ⚠️ **Jellyfin :** vous pouvez rencontrer des problèmes avec la détection des animes et des épisodes selon la structure de votre bibliothèque.
+
+## 📋 Prérequis
+
+- Docker
+- Docker Compose
+
+> 💡 Une bibliothèque Plex, Emby ou Jellyfin **n'est pas obligatoire**. Elle est uniquement nécessaire si vous souhaitez organiser automatiquement les fichiers téléchargés dans votre bibliothèque multimédia.
+
+## 🚀 Installation
+
+### Méthode rapide avec Docker Compose
 
 Créez un fichier `docker-compose.yml` avec le contenu suivant :
 
@@ -27,55 +42,110 @@ Créez un fichier `docker-compose.yml` avec le contenu suivant :
 services:
   anime-sama_downloader:
     image: maddoxtes/plex-anime-downloader:beta-0.9.0
+
     volumes:
       - /chemin/vers/vos/donnees:/mnt/user/appdata/anime-downloader
       - /chemin/vers/votre/bibliotheque/plex:/mnt/user/appdata/plex
+
     environment:
       - LOCAL_ADMIN_PASSWORD=votre_mot_de_passe_securise
+
     ports:
-      - 5001:5001  # Dashboard local (ne PAS exposer au public)
+      - "5000:5000"
 ```
 
-### 2. Variables d'environnement importantes
+### 📁 Volumes
 
-- **DATA** : Chemin vers les données de l'application (par défaut : `/mnt/user/appdata/anime-downloader`)
-- **PLEX** : Chemin vers votre bibliothèque Plex/Jellyfin (⚠️ Ce chemin doit être votre bibliothèque de films ou séries)
-- **LOCAL_ADMIN_PASSWORD** : Mot de passe pour accéder au dashboard local et modifier la configuration via l'interface web
+#### Données de l'application
 
-### 3. Ports
+```yaml
+- /chemin/vers/vos/donnees:/mnt/user/appdata/anime-downloader
+```
 
-- **5000:5000** : Port du dashboard local - ⚠️ Je vous conseille de ne PAS ouvrir ce port au public pour des raisons de sécurité
+Ce dossier contient les données et la configuration de l'application.
 
-### 4. Démarrer l'application
+#### Bibliothèque multimédia
+
+```yaml
+- /chemin/vers/votre/bibliotheque/plex:/mnt/user/appdata/plex
+```
+
+Si vous utilisez une bibliothèque multimédia, ce chemin doit correspondre à l'emplacement multimédia de votre plex/emby/jellyfin.
+
+> ⚠️ Assurez-vous que le conteneur Docker possède les permissions nécessaires pour lire et écrire dans ce dossier.
+
+## 🔐 Variables d'environnement
+
+| Variable | Description |
+|----------|-------------|
+| `LOCAL_ADMIN_PASSWORD` | Mot de passe permettant d'accéder au dashboard et de modifier la configuration |
+| `DATA` | Chemin des données de l'application |
+| `PLEX` | Chemin de la bibliothèque multimédia |
+
+> 💡 Les variables `DATA` et `PLEX` dépendent de votre configuration. Les chemins utilisés dans le conteneur doivent correspondre aux volumes définis dans votre `docker-compose.yml`.
+
+## 🌐 Port
+
+Le dashboard est accessible sur :
+
+```text
+http://localhost:5000
+```
+
+> ⚠️ **Sécurité :** ne rendez pas ce port accessible depuis Internet.
+
+## ▶️ Démarrer l'application
+
+### Télécharger l'image Docker
 
 ```bash
-# Télécharger l'image
-docker-compose pull
-
-# Démarrer le conteneur
-docker-compose up -d
-
-# Voir les logs
-docker-compose logs -f
+docker compose pull
 ```
 
-### 5. Configuration
+### Démarrer le conteneur
 
-1. Accédez à http://localhost:5000 pour configurer le serveur
-2. Connectez-vous avec le mot de passe défini dans `LOCAL_ADMIN_PASSWORD`
+```bash
+docker compose up -d
+```
 
+### Voir les logs
 
+```bash
+docker compose logs -f
+```
 
-# Tutoriel
+### Arrêter l'application
 
-[Comment installer et télécharger des animes avec la beta-0.9.0](https://youtu.be/dXu000JrCRc)
+```bash
+docker compose down
+```
 
-Si vous rencontrez des problèmes avec mon application Docker ou si vous trouvez des bugs, cree une issue sur le [Github](https://github.com/maddoxtes1/Plex-Anime-Downloader)
+## ⚙️ Configuration
 
+Une fois le conteneur démarré, ouvrez :
 
+```text
+http://localhost:5000
+```
 
-# Lien
+Connectez-vous avec le mot de passe défini dans :
 
-- [Github](https://github.com/maddoxtes1/Plex-Anime-Downloader)
+```yaml
+LOCAL_ADMIN_PASSWORD
+```
+
+Vous pourrez ensuite configurer l'application depuis l'interface web.
+
+## 📖 Tutoriel
+
+[Comment installer et télécharger des animes avec la version beta-0.9.0]()
+
+## 🐛 Problèmes et bugs
+
+Si vous rencontrez un problème avec l'application Docker ou si vous trouvez un bug, merci de créer une **issue sur GitHub**.
+
+## 🔗 Liens
+
+- [GitHub](https://github.com/maddoxtes1/Plex-Anime-Downloader)
 - [Docker Hub](https://hub.docker.com/r/maddoxtes/plex-anime-downloader)
-- [Patch-note](https://git.maddoxserv.com/maddox/Plex-Anime-Downloader/releases)
+- [Patch notes](https://git.maddoxserv.com/maddox/Plex-Anime-Downloader/releases)
