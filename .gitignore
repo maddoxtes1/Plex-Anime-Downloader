@@ -13,3 +13,4 @@ patchnote
 __pycache__/
 flasks/
 .playwright-mcp
+patchnote
