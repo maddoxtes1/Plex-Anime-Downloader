@@ -14,3 +14,4 @@ __pycache__/
 flasks/
 .playwright-mcp
 patchnote
+.zed
