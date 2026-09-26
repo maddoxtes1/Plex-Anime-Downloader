@@ -1,0 +1,712 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Paramètres - Dashboard Plex-Anime-Downloader{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .tab-content {
+        display: block !important;
+    }
+
+    .tab-content .settings-container {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 20px !important;
+        min-height: 600px;
+        align-items: flex-start !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        margin: 0;
+        padding: 0;
+    }
+
+    .settings-sidebar {
+        width: 250px !important;
+        flex-shrink: 0 !important;
+        flex-grow: 0 !important;
+        background: {{ theme_colors.bg_card }};
+        border: 1px solid {{ theme_colors.border }};
+        border-radius: 8px;
+        padding: 20px;
+        height: fit-content;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        margin: 0;
+        order: 1;
+        align-self: flex-start;
+    }
+
+    .settings-content {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        display: block !important;
+        width: auto !important;
+        order: 2;
+        margin: 0;
+        padding: 0;
+        align-self: flex-start;
+    }
+
+    .settings-content .card {
+        margin-top: 0 !important;
+    }
+
+    .settings-sidebar h3 {
+        margin: 0 0 15px 0;
+        font-size: 1.1rem;
+        color: {{ theme_colors.text_primary }};
+        padding-bottom: 10px;
+        border-bottom: 2px solid {{ theme_colors.border }};
+    }
+
+    .settings-category {
+        margin-bottom: 20px;
+    }
+
+    .settings-category-title {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: {{ theme_colors.text_secondary }};
+        margin-bottom: 8px;
+        padding: 8px 12px;
+        background: {{ theme_colors.bg_secondary }};
+        border: 1px solid {{ theme_colors.border }};
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        user-select: none;
+        position: relative;
+        z-index: 2;
+    }
+
+    .settings-category-title:hover {
+        background: {{ theme_colors.bg_secondary }};
+        color: {{ theme_colors.text_primary }};
+        border-color: {{ theme_colors.accent_primary }};
+    }
+
+    .settings-category-title.active {
+        background: {{ theme_colors.bg_secondary }};
+        color: {{ theme_colors.accent_primary }};
+        border-color: {{ theme_colors.accent_primary }};
+    }
+
+    .settings-submenu {
+        margin-left: 12px;
+        margin-top: 5px;
+        display: none !important;
+        position: relative;
+        z-index: 1;
+    }
+
+    .settings-category-title.active + .settings-submenu {
+        display: block !important;
+    }
+
+    .settings-submenu-item {
+        padding: 8px 12px;
+        margin: 4px 0;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        color: {{ theme_colors.text_secondary }};
+        font-size: 0.85rem;
+        user-select: none;
+        position: relative;
+        z-index: 2;
+    }
+
+    .settings-submenu-item:hover {
+        background: {{ theme_colors.bg_secondary }};
+        color: {{ theme_colors.text_primary }};
+    }
+
+    .settings-submenu-item.active {
+        background: {{ theme_colors.bg_secondary }};
+        color: {{ theme_colors.accent_primary }};
+        font-weight: 500;
+        border-left: 3px solid {{ theme_colors.accent_primary }};
+        padding-left: 9px;
+    }
+
+    .settings-section {
+        display: none;
+    }
+
+    .settings-section.active {
+        display: block;
+    }
+
+    .settings-section h2 {
+        margin-top: 0;
+        margin-bottom: 15px;
+        font-size: 1.5rem;
+    }
+
+    .settings-form-group {
+        margin-bottom: 20px;
+    }
+
+    .settings-form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: {{ theme_colors.text_primary }};
+    }
+
+    .settings-form-group input[type="text"],
+    .settings-form-group input[type="number"],
+    .settings-form-group select {
+        width: 100%;
+        max-width: 400px;
+        padding: 8px 12px;
+        background: {{ theme_colors.bg_card }};
+        border: 1px solid {{ theme_colors.border }};
+        border-radius: 6px;
+        color: {{ theme_colors.text_primary }};
+        font-size: 0.9rem;
+    }
+
+    .settings-form-group input[type="text"]:focus,
+    .settings-form-group input[type="number"]:focus,
+    .settings-form-group select:focus {
+        outline: none;
+        border-color: {{ theme_colors.accent_primary }};
+    }
+
+    .settings-form-group input[type="checkbox"] {
+        margin-right: 8px;
+    }
+
+    .settings-form-group .help-text {
+        font-size: 0.75rem;
+        color: {{ theme_colors.text_secondary }};
+        margin-top: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tab-content" style="display: block !important;">
+    <div class="settings-container" style="display: flex !important; flex-direction: row !important; align-items: flex-start !important;">
+        <!-- Menu latéral -->
+        <div class="settings-sidebar">
+            <h3>Catégories</h3>
+
+            <div class="settings-category">
+                <div class="settings-category-title" data-category="system">
+                    ⚙️ System
+                </div>
+                <div class="settings-submenu">
+                    <div class="settings-submenu-item" data-section="system-theme">Theme</div>
+                    <div class="settings-submenu-item" data-section="system-config">Config</div>
+                    <div class="settings-submenu-item" data-section="system-flaresolver">FlareSolver</div>
+                </div>
+            </div>
+
+            <div class="settings-category">
+                <div class="settings-category-title" data-category="plex">
+                    📁 Plex path
+                </div>
+                <div class="settings-submenu">
+                    <div class="settings-submenu-item" data-section="plex-paths">Chemins Plex</div>
+                </div>
+            </div>
+
+            <div class="settings-category">
+                <div class="settings-category-title" data-category="streaming">
+                    🌐 Streaming site
+                </div>
+                <div class="settings-submenu">
+                    <div class="settings-submenu-item" data-section="streaming-anime-sama">Anime-Sama</div>
+                    <div class="settings-submenu-item" data-section="streaming-franime">Franime</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenu dynamique -->
+        <div class="settings-content">
+            <div class="card mt-4">
+                <!-- Section System - Theme -->
+                <div class="settings-section" id="section-system-theme">
+                    <h2>Theme</h2>
+
+                    <div class="card mt-4">
+                        <h3 class="section-title">Thème de l'interface</h3>
+                        <p class="sub">
+                            Choisissez le thème visuel pour le dashboard.
+                        </p>
+                        <form method="post" action="{{ url_for('local.local_update_theme') }}">
+                            <div class="mb-2">
+                                <label class="small" for="theme">Thème actuel :</label>
+                                <select name="theme" id="theme" style="width: 200px;">
+                                    {% for theme_key, theme_name in available_themes.items() %}
+                                        <option value="{{ theme_key }}" {% if theme_key == current_theme %}selected{% endif %}>
+                                            {{ theme_name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button class="btn primary" type="submit">Changer le thème</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Section System - Config -->
+                <div class="settings-section" id="section-system-config">
+                    <h2>Configuration System</h2>
+
+                    <div class="card mt-4">
+                        <h3 class="section-title">Paramètres système</h3>
+                        <p class="sub">
+                            Fichier : <code>{{ CONFIG_PATH if CONFIG_PATH is defined else 'config.conf' }}</code>
+                        </p>
+
+                        <form method="post" action="{{ url_for('local.local_update_config') }}">
+                            <div class="settings-form-group">
+                                <label for="threads">Threads</label>
+                                <input class="short" type="number" id="threads" name="threads" min="1" value="{{ config.settings.threads }}">
+                                <p class="help-text">
+                                    Nombre de threads utilisés pour le traitement parallèle des téléchargements
+                                </p>
+                            </div>
+
+                            <div class="settings-form-group">
+                                <label for="timer">Timer (secondes)</label>
+                                <input class="short" type="number" id="timer" name="timer" min="1" value="{{ config.settings.timer }}">
+                                <p class="help-text">
+                                    Intervalle en secondes entre chaque scan automatique des animes
+                                </p>
+                            </div>
+
+                            <div class="settings-form-group">
+                                <label for="log_level">Niveau de log</label>
+                                <select id="log_level" name="log_level" class="medium">
+                                    <option value="DEBUG" {% if config.settings.log_level == 'DEBUG' %}selected{% endif %}>DEBUG</option>
+                                    <option value="INFO" {% if config.settings.log_level == 'INFO' %}selected{% endif %}>INFO</option>
+                                    <option value="WARNING" {% if config.settings.log_level == 'WARNING' %}selected{% endif %}>WARNING</option>
+                                    <option value="ERROR" {% if config.settings.log_level == 'ERROR' %}selected{% endif %}>ERROR</option>
+                                    <option value="CRITICAL" {% if config.settings.log_level == 'CRITICAL' %}selected{% endif %}>CRITICAL</option>
+                                </select>
+                                <p class="help-text">
+                                    Niveau de détail des logs (DEBUG = très détaillé, CRITICAL = erreurs critiques uniquement)
+                                </p>
+                            </div>
+
+                            <button class="btn primary" type="submit">Sauvegarder</button>
+                        </form>
+                    </div>
+                </div>
+                <!-- Section System - flaresolver -->
+                <div class="settings-section" id="section-system-flaresolver">
+                    <h2>Configuration System</h2>
+
+                    <div class="card mt-4">
+                        <h3 class="section-title">Paramètres FlareSolver</h3>
+                        <p class="sub">
+                            Paramètres pour FlareSolver si il est pas activer Franime ne poura pas marcher
+                        </p>
+
+                        <form method="post" action="{{ url_for('local.local_update_flaresolver') }}">
+                            <div class="settings-form-group">
+                                <label>
+                                    <input type="checkbox" name="use_flaresolver" {% if config.flaresolver.use_flaresolver %}checked{% endif %}>
+                                    Active Flaresolver
+                                </label>
+                                <p class="help-text">
+                                    FlareSolver est utilisé pour bypass Cloudflare
+                                </p>
+                            </div>
+
+                            <div class="settings-form-group">
+                                <label for="flaresolver_host">FlareSolver Host</label>
+                                <input class="medium" type="text" id="flaresolver_host" name="flaresolver_host"
+                                       placeholder="flaresolver"
+                                       value="{{ config.flaresolver.host }}"
+                                       style="width: 100%; max-width: 400px;">
+                                <p class="help-text">
+                                    Nom d'hôte du service FlareSolver (pour contourner la protection antibot)
+                                </p>
+                            </div>
+
+                            <div class="settings-form-group">
+                                <label for="flaresolver_port">FlareSolver Port</label>
+                                <input class="medium" type="number" id="flaresolver_port" name="flaresolver_port"
+                                       placeholder="8191"
+                                       value="{{ config.flaresolver.port }}"
+                                       style="width: 100%; max-width: 400px;">
+                                <p class="help-text">
+                                    Port du service FlareSolver
+                                </p>
+                            </div>
+
+                            <button class="btn primary" type="submit">Sauvegarder</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Section Plex path -->
+                <div class="settings-section" id="section-plex-paths">
+                    <h2>Chemins Plex</h2>
+
+                    <div class="card mt-4">
+                        <h3 class="section-title">Chemins Plex (plex_path.json)</h3>
+                        <p class="sub">
+                            Racine Plex : <code>{{ plex_root }}</code><br>
+                            Chaque entrée correspond à un dossier (path) dans Plex, avec une ou plusieurs langues.<br>
+                            Vous pouvez modifier le langage des dossiers, mais un langage ne peut exister que dans un seul dossier.
+                            voici les langues disponible: vostfr, va, vf, vkr, vcn, vqc, vf1, vf2, vj.
+                        </p>
+
+                        {% if plex_entries %}
+                            <table class="mb-3">
+                                <thead>
+                                    <tr>
+                                        <th>Path</th>
+                                        <th>Langues</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for e in plex_entries %}
+                                        <tr>
+                                            <td>
+                                                <form class="inline" method="post" action="{{ url_for('local.local_plex_update') }}">
+                                                    <input type="hidden" name="old_path" value="{{ e.path }}">
+                                                    <input class="medium" type="text" name="path" value="{{ e.path }}">
+                                            </td>
+                                            <td>
+                                                    <input class="medium" type="text" name="languages" value="{{ e.language|join(', ') }}">
+                                            </td>
+                                            <td>
+                                                    <button class="btn" type="submit">Mettre à jour</button>
+                                                </form>
+                                                <form class="inline plex-delete-form" method="post" action="{{ url_for('local.local_plex_delete') }}" onsubmit="return confirmDeletePlexPath(event, '{{ e.path }}')">
+                                                    <input type="hidden" name="path" value="{{ e.path }}">
+                                                    <button class="btn danger" type="submit">Supprimer</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        {% else %}
+                            <div class="empty mb-3">
+                                Aucun chemin configuré pour l'instant.
+                            </div>
+                        {% endif %}
+
+                        <form method="post" action="{{ url_for('local.local_plex_add') }}" class="mt-2">
+                            <label class="small">Ajouter / mettre à jour un chemin :</label><br>
+                            <input class="medium" type="text" name="path" placeholder="ex: anime_vf" required>
+                            <input class="medium" type="text" name="languages" placeholder="ex: vf, vj">
+                            <button class="btn primary" type="submit">Enregistrer</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Section Streaming site - Anime-Sama -->
+                <div class="settings-section" id="section-streaming-anime-sama">
+                    <h2>Anime-Sama</h2>
+
+                    <div class="card mt-4">
+                        <h3 class="section-title">Configuration Anime-Sama</h3>
+                        <p class="sub">
+                            Paramètres pour le site anime-sama
+                        </p>
+
+                        <form method="post" action="{{ url_for('local.local_update_anime_sama') }}">
+                            <div class="settings-form-group">
+                                <label>
+                                    <input type="checkbox" name="anime_sama" {% if config.scan_option.anime_sama %}checked{% endif %}>
+                                    Activer scan anime-sama
+                                </label>
+                                <p class="help-text">
+                                    Active le scan automatique des animes depuis le site anime-sama
+                                </p>
+                            </div>
+
+                            <div class="settings-form-group">
+                                <label for="anime_sama_base_url">URL de base anime-sama</label>
+                                <input class="medium" type="text" id="anime_sama_base_url" name="anime_sama_base_url"
+                                       placeholder="https://anime-sama.tv"
+                                       value="{{ config.anime_sama.base_url }}"
+                                       style="width: 100%; max-width: 400px;">
+                                <p class="help-text">
+                                    URL de base du site anime-sama (ex: https://anime-sama.tv ou https://anime-sama.eu)
+                                </p>
+                            </div>
+
+                            <div class="settings-form-group">
+                                <label>
+                                    <input type="checkbox" name="anime_sama_auto_delete" {% if config.anime_sama.auto_delete %}checked{% endif %}>
+                                    Auto-delete anime-sama
+                                </label>
+                                <p class="help-text">
+                                    Supprime automatiquement les animes qui ne sont plus dans le planning d'anime-sama
+                                </p>
+                            </div>
+
+                            <button class="btn primary" type="submit">Sauvegarder</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Section Streaming site - Franime -->
+                <div class="settings-section" id="section-streaming-franime">
+                    <h2>Franime</h2>
+
+                    <div class="card mt-4">
+                        <h3 class="section-title">Configuration Franime</h3>
+                        <p class="sub">
+                            Paramètres pour le site franime
+                        </p>
+
+                        <form method="post" action="{{ url_for('local.local_update_franime') }}">
+                            <div class="settings-form-group">
+                                <label>
+                                    <input type="checkbox" name="franime" {% if config.scan_option.franime %}checked{% endif %}>
+                                    Activer scan franime
+                                </label>
+                                <p class="help-text">
+                                    Active le scan depuis franime
+                                </p>
+                            </div>
+
+                            <div class="settings-form-group">
+                                <label for="franime_base_url">URL de base franime</label>
+                                <input class="medium" type="text" id="franime_base_url" name="franime_base_url"
+                                       placeholder="https://franime.fr"
+                                       value="{{ config.franime.base_url }}"
+                                       style="width: 100%; max-width: 400px;">
+                                <p class="help-text">
+                                    URL de base du site franime
+                                </p>
+                            </div>
+
+                            <div class="settings-form-group">
+                                <label for="franime_api_base_url">URL de l'API franime</label>
+                                <input class="medium" type="text" id="franime_api_base_url" name="franime_api_base_url"
+                                       placeholder="https://api.franime.fr"
+                                       value="{{ config.franime.api_base_url }}"
+                                       style="width: 100%; max-width: 400px;">
+                                <p class="help-text">
+                                    URL de base de l'API franime
+                                </p>
+                            </div>
+
+                            <div class="settings-form-group">
+                                <label>
+                                    <input type="checkbox" name="franime_auto_delete" {% if config.franime.auto_delete %}checked{% endif %}>
+                                    Auto-delete franime
+                                </label>
+                                <p class="help-text">
+                                    Supprime automatiquement les animes qui ne sont plus dans le planning franime
+                                </p>
+                            </div>
+
+                            <button class="btn primary" type="submit">Sauvegarder</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+    // Navigation entre les sections
+    (function() {
+        'use strict';
+
+        function initSettings() {
+            console.log('Settings page loaded');
+
+            // Récupérer la section sauvegardée depuis localStorage
+            const savedSection = localStorage.getItem('settings-active-section');
+            let sectionToShow = null;
+            let categoryToOpen = null;
+            let menuItemToActivate = null;
+
+            if (savedSection) {
+                // Trouver l'item de menu correspondant
+                const savedMenuItem = document.querySelector(`.settings-submenu-item[data-section="${savedSection}"]`);
+                if (savedMenuItem) {
+                    sectionToShow = savedSection;
+                    menuItemToActivate = savedMenuItem;
+                    // Trouver la catégorie parente
+                    const parentCategory = savedMenuItem.closest('.settings-category');
+                    if (parentCategory) {
+                        categoryToOpen = parentCategory.querySelector('.settings-category-title');
+                    }
+                }
+            }
+
+            // Si aucune section sauvegardée, utiliser la première par défaut
+            if (!sectionToShow) {
+                const firstCategory = document.querySelector('.settings-category');
+                if (firstCategory) {
+                    const firstCategoryTitle = firstCategory.querySelector('.settings-category-title');
+                    const firstSection = firstCategory.querySelector('.settings-submenu-item');
+
+                    if (firstCategoryTitle && firstSection) {
+                        sectionToShow = firstSection.getAttribute('data-section');
+                        categoryToOpen = firstCategoryTitle;
+                        menuItemToActivate = firstSection;
+                    }
+                }
+            }
+
+            // Afficher la section
+            if (sectionToShow && categoryToOpen && menuItemToActivate) {
+                console.log('Showing saved section:', sectionToShow);
+
+                // Ouvrir la catégorie
+                categoryToOpen.classList.add('active');
+
+                // Activer l'item de menu
+                menuItemToActivate.classList.add('active');
+
+                // Afficher la section
+                showSection(sectionToShow);
+            }
+
+            // Gestion des clics sur les catégories
+            const categoryTitles = document.querySelectorAll('.settings-category-title');
+            categoryTitles.forEach(category => {
+                category.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Category clicked:', this.getAttribute('data-category'));
+
+                    // Toggle la catégorie
+                    const isActive = this.classList.contains('active');
+
+                    // Fermer toutes les catégories
+                    categoryTitles.forEach(c => {
+                        c.classList.remove('active');
+                    });
+
+                    // Ouvrir la catégorie cliquée si elle n'était pas active
+                    if (!isActive) {
+                        this.classList.add('active');
+                        console.log('Category opened');
+                    } else {
+                        console.log('Category closed');
+                    }
+                });
+            });
+
+            // Gestion des clics sur les sous-menus
+            const submenuItems = document.querySelectorAll('.settings-submenu-item');
+            submenuItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const sectionId = this.getAttribute('data-section');
+                    console.log('Submenu item clicked:', sectionId);
+
+                    // Retirer l'active de tous les items
+                    submenuItems.forEach(i => {
+                        i.classList.remove('active');
+                    });
+
+                    // Ajouter l'active à l'item cliqué
+                    this.classList.add('active');
+
+                    // S'assurer que la catégorie parente est ouverte
+                    const parentCategory = this.closest('.settings-category');
+                    if (parentCategory) {
+                        const parentTitle = parentCategory.querySelector('.settings-category-title');
+                        if (parentTitle) {
+                            parentTitle.classList.add('active');
+                        }
+                    }
+
+                    // Sauvegarder la section active dans localStorage
+                    localStorage.setItem('settings-active-section', sectionId);
+
+                    // Afficher la section correspondante
+                    showSection(sectionId);
+                });
+            });
+
+            // Sauvegarder la section active avant la soumission des formulaires
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', function() {
+                    // Trouver la section active actuelle
+                    const activeMenuItem = document.querySelector('.settings-submenu-item.active');
+                    if (activeMenuItem) {
+                        const activeSection = activeMenuItem.getAttribute('data-section');
+                        if (activeSection) {
+                            localStorage.setItem('settings-active-section', activeSection);
+                        }
+                    }
+                });
+            });
+        }
+
+        function showSection(sectionId) {
+            console.log('Showing section:', sectionId);
+            // Masquer toutes les sections
+            const allSections = document.querySelectorAll('.settings-section');
+            allSections.forEach(section => {
+                section.classList.remove('active');
+            });
+
+            // Afficher la section demandée
+            const targetSection = document.getElementById('section-' + sectionId);
+            if (targetSection) {
+                targetSection.classList.add('active');
+                console.log('Section displayed:', targetSection.id);
+            } else {
+                console.error('Section not found: section-' + sectionId);
+            }
+        }
+
+        // Initialiser quand le DOM est prêt
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initSettings);
+        } else {
+            initSettings();
+        }
+
+        // Exposer showSection globalement si nécessaire
+        window.showSection = showSection;
+    })();
+
+    // Gestion de la modale de confirmation pour suppression de chemin Plex
+    let pendingDeleteForm = null;
+
+    function confirmDeletePlexPath(event, pathName) {
+        event.preventDefault();
+        pendingDeleteForm = event.currentTarget || event.target.closest('form');
+
+        document.getElementById('delete-path-name').textContent = pathName;
+        document.getElementById('delete-confirm-modal').classList.add('show');
+
+        const confirmBtn = document.getElementById('confirm-delete-btn');
+        confirmBtn.onclick = function() {
+            if (pendingDeleteForm) {
+                pendingDeleteForm.submit();
+            }
+        };
+
+        return false;
+    }
+
+    // Fermer la modale avec la touche Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('delete-confirm-modal');
+            if (modal && modal.classList.contains('show')) {
+                modal.classList.remove('show');
+                pendingDeleteForm = null;
+            }
+        }
+    });
+{% endblock %}

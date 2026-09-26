@@ -1,7 +1,7 @@
 _ENV_CONFIG = {
     "plex_anime_downloader_V": {
         "env_var": "PLEX_ANIME_DOWNLOADER_V",
-        "default": "Beta-0.8.0",
+        "default": "Beta-0.9.0",
         "type": str,
         "use_default": True
     },
@@ -48,13 +48,6 @@ _Folder_Config = {
             },
             "anime_details.json": {
                 "default_content": "anime_details.json"
-            },
-            "users.db": {
-                "default_content": "none",
-                "file_script": "create_users_db",
-                "file_script_params": {
-                    "db_path": ":users.db:"
-                }
             },
             "planning_scan_data.json": {
                 "default_content": "none"
@@ -124,13 +117,12 @@ _File_Config = {
                 "threads": 4,
                 "timer": 3600,
                 "theme": "neon-cyberpunk",
-                "news": "True",
                 "log_level": "INFO"
             },
             "flaresolver": {
                 "host": "flaresolver",
                 "port": 8191,
-                "use_flaresolver": True,
+                "use_flaresolver": False,
             },
             "scan-option": {
                 "anime-sama": True,

@@ -1,0 +1,87 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Recherche - Dashboard Plex-Anime-Downloader{% endblock %}
+
+{% block content %}
+<div class="search-page">
+    <div class="search-container">
+        <h1>🔍 Recherche</h1>
+        <p class="search-description">Page de recherche vide - fonctionnalité à venir</p>
+        
+        <div class="search-input-container">
+            <input type="text" placeholder="Rechercher..." class="search-input" disabled>
+            <button type="submit" class="search-button" disabled>Rechercher</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .search-page {
+        text-align: center;
+        padding: 40px 0;
+    }
+
+    .search-container h1 {
+        font-size: 2.5rem;
+        color: {{ theme_colors.text_primary }};
+        margin-bottom: 16px;
+    }
+
+    .search-description {
+        color: {{ theme_colors.text_secondary }};
+        font-size: 1.1rem;
+        margin-bottom: 40px;
+    }
+
+    .search-input-container {
+        display: flex;
+        max-width: 600px;
+        margin: 0 auto;
+        gap: 12px;
+    }
+
+    .search-input {
+        flex: 1;
+        padding: 16px 24px;
+        font-size: 1rem;
+        border: 2px solid {{ theme_colors.border }};
+        border-radius: 12px;
+        background: {{ theme_colors.bg_secondary }};
+        color: {{ theme_colors.text_primary }};
+        transition: all 0.3s;
+    }
+
+    .search-input:focus {
+        outline: none;
+        border-color: {{ theme_colors.accent_primary }};
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    }
+
+    .search-button {
+        padding: 16px 32px;
+        font-size: 1rem;
+        font-weight: 600;
+        border: none;
+        border-radius: 12px;
+        background: {{ theme_colors.accent_primary }};
+        color: white;
+        cursor: not-allowed;
+        opacity: 0.6;
+        transition: all 0.3s;
+    }
+
+    .search-button:hover {
+        opacity: 1;
+    }
+
+    .search-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 20px;
+        color: {{ theme_colors.text_secondary }};
+        font-size: 1.2rem;
+    }
+</style>
+
+{% endblock %}
