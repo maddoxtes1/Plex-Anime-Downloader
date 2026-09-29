@@ -44,7 +44,7 @@ services:
     image: maddoxtes/plex-anime-downloader:beta-0.8.1
 
     volumes:
-      - /chemin/vers/vos/donnees:/mnt/user/appdata/anime-downloader
+      - /chemin/vers/vos/donnees:/mnt/user/appdata/plex-anime-downloader
       - /chemin/vers/votre/bibliotheque/plex:/mnt/user/appdata/plex
 
     environment:
@@ -59,7 +59,7 @@ services:
 #### Données de l'application
 
 ```yaml
-- /chemin/vers/vos/donnees:/mnt/user/appdata/anime-downloader
+- /chemin/vers/vos/donnees:/mnt/user/appdata/plex-anime-downloader
 ```
 
 Ce dossier contient les données et la configuration de l'application.
