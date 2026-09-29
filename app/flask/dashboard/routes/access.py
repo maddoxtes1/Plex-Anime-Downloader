@@ -48,7 +48,7 @@ def register_access_routes(local_bp, local_admin_password_hash):
                         session["last_activity"] = datetime.now().isoformat()
                         session.permanent = True
                         flash("Connexion réussie.", "success")
-                        return redirect(url_for("local.local_dashboard_search"))
+                        return redirect(url_for("local.local_dashboard_planning"))
                 except Exception as e:
                     flash(f"Erreur lors de la vérification du mot de passe: {str(e)}", "error")
 

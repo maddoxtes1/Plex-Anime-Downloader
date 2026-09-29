@@ -1,87 +1,1519 @@
-{% extends "base_dashboard.html" %}
+{% extends "base_dashboard.html" %} {% block title %}Recherche - Dashboard
+Plex-Anime-Downloader{% endblock %} {% block content %}
 
-{% block title %}Recherche - Dashboard Plex-Anime-Downloader{% endblock %}
-
-{% block content %}
 <div class="search-page">
     <div class="search-container">
         <h1>🔍 Recherche</h1>
-        <p class="search-description">Page de recherche vide - fonctionnalité à venir</p>
-        
-        <div class="search-input-container">
-            <input type="text" placeholder="Rechercher..." class="search-input" disabled>
-            <button type="submit" class="search-button" disabled>Rechercher</button>
+
+        <p class="search-description">
+            Recherchez des anime sur Anime-sama et récupérez les résultats.
+        </p>
+
+        <!-- Recherche -->
+        <div class="search-controls">
+            <div class="search-source-container">
+                <span class="search-source-label"> Anime-Sama </span>
+
+                <label class="search-switch">
+                    <input type="checkbox" id="searchSourceSwitch" />
+
+                    <span class="search-switch-slider"></span>
+                </label>
+
+                <span class="search-source-label" id="searchSourceLabel">
+                    FrAnime
+                </span>
+            </div>
+
+            <div class="search-input-container">
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="Entrez le nom de l'anime..."
+                    class="search-input"
+                />
+
+                <button type="button" id="searchButton" class="search-button">
+                    Rechercher
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div
+            id="loadingContainer"
+            class="loading-container"
+            style="display: none"
+        >
+            <div class="spinner"></div>
+            <p>Recherche en cours...</p>
+        </div>
+
+        <!-- Erreur -->
+        <div
+            id="errorContainer"
+            class="error-container"
+            style="display: none"
+        ></div>
+
+        <!-- Résultats -->
+        <div
+            id="resultsContainer"
+            class="results-container"
+            style="display: none"
+        >
+            <h2>Résultats (<span id="resultCount">0</span>)</h2>
+
+            <div id="resultsList" class="results-list"></div>
         </div>
     </div>
 </div>
 
-<style>
-    .search-page {
-        text-align: center;
-        padding: 40px 0;
-    }
+<!-- ========================================================= -->
 
-    .search-container h1 {
-        font-size: 2.5rem;
-        color: {{ theme_colors.text_primary }};
-        margin-bottom: 16px;
-    }
+<!-- MODAL DÉTAILS ANIME                                      -->
 
-    .search-description {
-        color: {{ theme_colors.text_secondary }};
-        font-size: 1.1rem;
-        margin-bottom: 40px;
-    }
+<!-- ========================================================= -->
 
-    .search-input-container {
-        display: flex;
-        max-width: 600px;
-        margin: 0 auto;
-        gap: 12px;
-    }
+<div class="anime-details-modal" id="anime-details-modal" style="display: none">
+    <div class="anime-details-content">
+        <div class="anime-details-header">
+            <h3 id="anime-details-title">Détails de l'anime</h3>
 
-    .search-input {
-        flex: 1;
-        padding: 16px 24px;
-        font-size: 1rem;
-        border: 2px solid {{ theme_colors.border }};
-        border-radius: 12px;
-        background: {{ theme_colors.bg_secondary }};
-        color: {{ theme_colors.text_primary }};
-        transition: all 0.3s;
-    }
+            <button class="anime-details-close" onclick="closeAnimeDetails()">
+                ×
+            </button>
+        </div>
 
-    .search-input:focus {
-        outline: none;
-        border-color: {{ theme_colors.accent_primary }};
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
-    }
+        <div class="anime-details-body" id="anime-details-body">
+            <div class="anime-details-loading">Chargement des détails...</div>
+        </div>
 
-    .search-button {
-        padding: 16px 32px;
-        font-size: 1rem;
-        font-weight: 600;
-        border: none;
-        border-radius: 12px;
-        background: {{ theme_colors.accent_primary }};
-        color: white;
-        cursor: not-allowed;
-        opacity: 0.6;
-        transition: all 0.3s;
-    }
+        <div
+            class="anime-details-footer"
+            id="anime-details-footer"
+            style="display: none"
+        >
+            <div class="anime-details-footer-left">
+                <button
+                    class="btn primary"
+                    onclick="openAnimeSamaPage()"
+                    id="anime-open-btn"
+                >
+                    🌐 Ouvrir
+                </button>
+            </div>
 
-    .search-button:hover {
-        opacity: 1;
-    }
+            <div class="anime-details-footer-right">
+                <button
+                    class="btn add"
+                    onclick="addSelectedSeasons()"
+                    id="anime-add-btn"
+                >
+                    ➕ Ajouter
+                </button>
 
-    .search-placeholder {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 60px 20px;
-        color: {{ theme_colors.text_secondary }};
-        font-size: 1.2rem;
-    }
-</style>
+                <button class="btn" onclick="closeAnimeDetails()">
+                    Fermer
+                </button>
+            </div>
+        </div>
+    </div>
 
-{% endblock %}
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+          // ✅ Tous les éléments sont désormais accessibles
+          const searchText = document.getElementById("searchInput");
+          const searchButton = document.getElementById("searchButton");
+          const searchSourceSwitch = document.getElementById("searchSourceSwitch");
+
+          // ✅ Gestion du "Entrée"
+          searchText.addEventListener("keypress", (event) => {
+            if (event.key === "Enter") {
+              performSearch();
+            }
+          });
+
+          // ✅ Fonction de recherche
+          async function performSearch() {
+            const query = searchText.value.trim();
+            if (!query) return;
+
+            showLoading(true);
+            try {
+              const source = searchSourceSwitch.checked ? "franime" : "anime_sama";
+              const response = await fetch("/api/search", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query, source })
+              });
+
+              if (!response.ok) throw new Error("Erreur de recherche");
+              const data = await response.json();
+              displayResults(data.hrefs || []);
+            } catch (e) {
+              showError("Erreur : " + e.message);
+            } finally {
+              showLoading(false);
+            }
+          }
+
+          // ✅ Bouton "Rechercher"
+          searchButton.addEventListener("click", performSearch);
+          searchButton.onclick = performSearch; // Redundant mais safe
+        });
+
+        // =========================================================
+        // DISPLAY RESULTS
+        // =========================================================
+
+        function displayResults(results) {
+            const resultsList = document.getElementById("resultsList");
+
+            const resultCount = document.getElementById("resultCount");
+
+            const resultsContainer =
+                document.getElementById("resultsContainer");
+
+            /*
+             * Remove movies and anime without real seasons.
+             *
+             * Keep only anime that have at least one season.
+             */
+            searchResults = results.filter((anime) => {
+                /*
+                 * No seasons array
+                 */
+                if (!Array.isArray(anime.seasons)) {
+                    return false;
+                }
+
+                /*
+                 * Remove empty seasons
+                 */
+                if (anime.seasons.length === 0) {
+                    return false;
+                }
+
+                /*
+                 * Remove entries where every season value is "Film"
+                 */
+                const realSeasons = anime.seasons.filter(
+                    (season) => String(season).toLowerCase() !== "film",
+                );
+
+                /*
+                 * Keep only anime with at least
+                 * one real season.
+                 */
+                return realSeasons.length > 0;
+            });
+
+            /*
+             * Update the result count AFTER filtering.
+             */
+            resultCount.textContent = searchResults.length;
+
+            resultsContainer.style.display = "block";
+
+            /*
+             * No anime left after filtering.
+             */
+            if (searchResults.length === 0) {
+                resultsList.innerHTML =
+                    "<p>Aucun anime avec des saisons trouvé.</p>";
+
+                return;
+            }
+
+            /*
+             * Create one card per anime.
+             */
+            resultsList.innerHTML = searchResults
+                .map((anime, index) => {
+                    const seasons = Array.isArray(anime.seasons) && anime.seasons.length > 0
+                        ? anime.seasons
+                            .filter(season => String(season).toLowerCase() !== "film")
+                            .map(season => `<span class="anime-tag">S${escapeHtml(season)}</span>`)
+                            .join("")
+                        : "<span class=\"anime-tag\">Film</span>";
+
+                    return `
+                        <div class="planning-card" onclick="openAnimeDetails(${index})">
+                            <img
+                                src="${escapeHtml(anime.image || "")}"
+                                alt="${escapeHtml(anime.title || "")}"
+                                class="planning-card-image"
+                            >
+
+                            <div class="planning-card-title">
+                                ${escapeHtml(anime.title || "Anime")}
+                            </div>
+
+                            <div class="planning-card-lang">
+                                ${seasons}
+                            </div>
+                        </div>
+                    `;
+                    })
+                    .join("");
+        }
+        // =========================================================
+        // OPEN ANIME DETAILS
+        // =========================================================
+        //
+        function openAnimeDetails(index) {
+            selectedAnime = searchResults[index];
+            selectedSeasons = [];
+
+            if (!selectedAnime) {
+                return;
+            }
+
+            const modal = document.getElementById("anime-details-modal");
+
+            const title = document.getElementById("anime-details-title");
+
+            const body = document.getElementById("anime-details-body");
+
+            const footer = document.getElementById("anime-details-footer");
+
+            /*
+             * Title
+             */
+            title.textContent = selectedAnime.title || "Détails de l'anime";
+
+            /*
+             * Genres
+             */
+            const genres =
+                Array.isArray(selectedAnime.genres) &&
+                selectedAnime.genres.length > 0
+                    ? selectedAnime.genres
+                          .map(
+                              (genre) =>
+                                  `<span class="anime-tag">${escapeHtml(genre)}</span>`,
+                          )
+                          .join("")
+                    : "<span>Aucun genre</span>";
+
+            /*
+             * Seasons
+             */
+            const seasons =
+                Array.isArray(selectedAnime.seasons) &&
+                selectedAnime.seasons.length > 0
+                    ? selectedAnime.seasons
+                          .filter(
+                              (season) =>
+                                  String(season).toLowerCase() !== "film",
+                          )
+                          .map(
+                              (season) =>
+                                  `<button type="button"class="anime-tag season-select"data-season="${escapeHtml(season)}">S${escapeHtml(season)}</button>`,
+                          )
+                          .join("")
+                    : "<span>Film</span>";
+
+            /*
+             * Description
+             */
+            const description =
+                selectedAnime.description || "Aucune description disponible.";
+
+            /*
+             * Modal content
+             */
+            body.innerHTML = `
+
+            <div class="anime-details-info">
+
+                <img
+                    src="${escapeHtml(selectedAnime.image || "")}"
+                    alt="${escapeHtml(selectedAnime.title || "")}"
+                    class="anime-details-image"
+                >
+
+                <div class="anime-details-text">
+
+                    <h4>
+                        ${escapeHtml(selectedAnime.title || "Anime")}
+                    </h4>
+
+                    <p class="anime-details-description">
+                        ${escapeHtml(description)}
+                    </p>
+
+                    <div class="anime-details-section">
+
+                        <strong>Genres</strong>
+
+                        <div class="anime-tags">
+                            ${genres}
+                        </div>
+
+                    </div>
+
+                    <div class="anime-details-section">
+
+                        <strong>Saisons</strong>
+
+                        <div class="anime-tags">
+                            ${seasons}
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <details class="season-warning">
+
+                <summary>
+                    ⚠️ Attention à l’indexation des saisons
+                </summary>
+
+                <div class="season-warning-content">
+
+                    Certains anime, comme <strong>Fate</strong>, utilisent une
+                    organisation particulière sur Anime-Sama. Les numéros de
+                    saison peuvent ne pas correspondre à l’ordre ou au nom
+                    réel des œuvres.
+
+                    <br><br>
+
+                    Par exemple, <strong>saison4</strong> peut correspondre à
+                    <strong>Fate/stay night: Unlimited Blade Works</strong>,
+                    et non à une quatrième saison.
+
+                    <br><br>
+
+                    Dans ces cas, les informations affichées et l’organisation
+                    des dossiers peuvent donc être différentes de l’ordre
+                    recommandé de visionnage.
+
+                </div>
+
+            </details>
+
+        `;
+
+            /*
+             * Show footer.
+             */
+            footer.style.display = "flex";
+
+            // 👉 NOUVEAU CODE POUR BONNE FUNCTIONNEMENT DES SAISONS 👈
+            const seasonButtons = body.querySelectorAll('.season-select');
+            seasonButtons.forEach(button => {
+                button.addEventListener('click', () => toggleSeason(button));
+            });
+
+            /*
+             * Show modal.
+             */
+            modal.style.display = "flex";
+        }
+
+
+        function toggleSeason(seasonButton) {
+            const season = seasonButton.dataset.season;
+
+            if (selectedSeasons.includes(season)) {
+                selectedSeasons = selectedSeasons.filter(value => value !== season);
+                seasonButton.classList.remove('selected');
+            } else {
+                selectedSeasons.push(season);
+                seasonButton.classList.add('selected');
+            }
+        }
+        function showLanguageSelectionModal(seasons) {
+            // Crée un modal pour la sélection des langues
+            const modal = document.createElement('div');
+            modal.className = 'language-selection-modal';
+            modal.style.display = 'none';
+            modal.innerHTML = `
+                <div class="language-selection-content">
+                    <div class="language-selection-header">
+                        <h3>Choisir les langues pour chaque saison</h3>
+                        <button class="close-button" onclick="closeLanguageSelectionModal()">×</button>
+                    </div>
+                    <div class="language-selection-body">
+                        <!-- Les éléments seront ajoutés dynamiquement -->
+                    </div>
+                    <div class="language-selection-footer">
+                        <button class="btn" onclick="confirmLanguageSelection()">Confirmer</button>
+                    </div>
+                </div>
+            `;
+
+            // Ajoute le modal au corps de la page
+            document.body.appendChild(modal);
+
+            // Remplit le corps du modal avec les choix de langue par saison
+            const body = document.querySelector('.language-selection-body');
+            const selectedLanguages = {};
+
+            seasons.forEach(seasonData => {
+                const season = seasonData.season;
+                const languages = seasonData.languages || [];
+
+                const seasonDiv = document.createElement('div');
+                seasonDiv.className = 'language-season';
+                seasonDiv.innerHTML = `
+                    <h4>Saison ${season}</h4>
+                    <div class="language-options">
+                        ${languages.map(lang => `
+                            <label>
+                                <input type="radio" name="season-${season}" value="${lang}" />
+                                ${lang}
+                            </label>
+                        `).join('')}
+                    </div>
+                `;
+
+                body.appendChild(seasonDiv);
+
+                // Stocke les éléments du DOM pour la confirmation
+                selectedLanguages[season] = seasonDiv.querySelector(`input[value="${lang}"]`);
+            });
+
+            // Affiche le modal
+            modal.style.display = 'flex';
+
+            // Enregistre la fonction de fermeture
+            window.closeLanguageSelectionModal = () => {
+                modal.style.display = 'none';
+                document.body.removeChild(modal);
+            };
+
+            // Enregistre la fonction de confirmation
+            window.confirmLanguageSelection = () => {
+                const selected = {};
+                seasons.forEach(seasonData => {
+                    const season = seasonData.season;
+                    const selectedRadio = modal.querySelector(`input[name="season-${season}"]:checked`);
+                    if (selectedRadio) {
+                        selected[season] = selectedRadio.value;
+                    }
+                });
+
+                // Envoie les choix au serveur
+                sendLanguageSelection(selected);
+
+                // Ferme le modal
+                modal.style.display = 'none';
+                document.body.removeChild(modal);
+            };
+        }
+
+        function sendLanguageSelection(selectedLanguages) {
+            fetch("/api/download/add", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    anime: selectedAnime,
+                    seasons: selectedSeasons,
+                    languages: selectedLanguages,
+                    source: searchSourceSwitch.checked ? "franime" : "anime_sama",
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                } else {
+                    alert("Téléchargement en cours...");
+                }
+            })
+            .catch(error => {
+                showError("Erreur lors de la sélection des langues : " + error.message);
+            });
+        }
+
+        // =========================================================
+        // CLOSE MODAL
+        // =========================================================
+        function closeAnimeDetails() {
+            const modal = document.getElementById("anime-details-modal");
+
+            modal.style.display = "none";
+
+            selectedAnime = null;
+        }
+
+        // =========================================================
+        // OPEN ANIME PAGE
+        // =========================================================
+
+        function openAnimeSamaPage() {
+            if (!selectedAnime || !selectedAnime.url) {
+                return;
+            }
+
+            window.open(selectedAnime.url, "_blank");
+        }
+
+        // =========================================================
+        // DELETE ANIME
+        // =========================================================
+
+        function deleteAnime() {
+            if (!selectedAnime) {
+                return;
+            }
+
+            console.log("Delete anime:", selectedAnime);
+
+            /*
+             * Add your delete API call here later.
+             */
+        }
+
+        // =========================================================
+        // HTML ESCAPE
+        // =========================================================
+
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+
+            div.textContent = text ?? "";
+
+            return div.innerHTML;
+        }
+
+        // =========================================================
+        // LOADING
+        // =========================================================
+
+        function showLoading(show) {
+            const loadingContainer =
+                document.getElementById("loadingContainer");
+
+            loadingContainer.style.display = show ? "block" : "none";
+        }
+
+        // =========================================================
+        // RESULTS
+        // =========================================================
+
+        function hideResults() {
+            document.getElementById("resultsContainer").style.display = "none";
+        }
+
+
+        async function addSelectedSeasons() {
+            if (!selectedAnime) return;
+            if (selectedSeasons.length === 0) {
+                showError("Veuillez sélectionner au moins une saison.");
+                return;
+            }
+
+            try {
+                // 🔁 1. SCRAP NOUVELLEMENT LE SITE POUR LES LANGUES
+                // (via la nouvelle route /api/download/language)
+                const source = searchSourceSwitch.checked ? "franime" : "anime_sama";
+                const response = await fetch("/api/download/language", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        anime: selectedAnime,
+                        seasons: selectedSeasons,
+                        source: source,
+                    }),
+                });
+
+                if (!response.ok) throw new Error("Impossible de scraper les langues");
+                const languages = await response.json(); // Ex: { "S1": ["French", "English"], "S2": ["French"] }
+
+                // 🔁 2. AFFICHE LA POPUP AVEC UN BOUTON PAR SAISON (DANS UNE BOUCLE)
+                displayLanguageSelection(languages);
+            } catch (error) {
+                showError("Erreur : " + error.message);
+            }
+        }
+
+        // 🔁 Fonction pour afficher la popup de choix de langue
+        function displayLanguageSelection(languages) {
+            const footer = document.getElementById("anime-details-footer");
+            const leftContainer = footer.querySelector(".anime-details-footer-left");
+            const rightContainer = footer.querySelector(".anime-details-footer-right");
+
+            // 📌 BORNER : REMPLACE LE CONTENU DE LA FOOTER
+            leftContainer.innerHTML = `
+                <div class="season-lang-container">
+                    <strong>⚠️ Choisissez une langue par saison :</strong>
+                    ${Object.keys(languages).map(season => `
+                        <div class="season-item">
+                            <strong>Saison ${season} :</strong>
+                            <div class="lang-buttons">
+                                ${languages[season].map(lang => `
+                                    <button class="btn lang-select"
+                                            data-season="${season}"
+                                            data-lang="${lang}">
+                                        ${lang}
+                                    </button>
+                                `).join("")}
+                            </div>
+                        </div>
+                    `).join("")}
+                </div>
+            `;
+
+            rightContainer.innerHTML = `
+                <button class="btn primary" onclick="confirmLanguageSelection(${JSON.stringify(languages)})">
+                    🚀 Confirmer les langues
+                </button>
+                <button class="btn" onclick="closeAnimeDetails()">Annuler</button>
+            `;
+        }
+
+        // 🔁 Fonction pour confirmer les choix de langue
+        function confirmLanguageSelection(languages) {
+            // 📌 COLLECTIONNER LES LANGUES SÉLECTIONNÉES (DANS UNE BOUCLE)
+            const selectedLanguages = {};
+            document.querySelectorAll(".lang-select").forEach(button => {
+                if (button.classList.contains("selected")) {
+                    selectedLanguages[button.dataset.season] = button.dataset.lang;
+                }
+            });
+
+            // ⚠️ SI AUJOURD'HÔMMAGE AUCUNE LANGUES SÉLECTIONNÉES
+            if (Object.keys(selectedLanguages).length === 0) {
+                return showError("Veuillez sélectionner une langue pour chaque saison");
+            }
+
+            // 🔁 ENVOI À L'API DE TÉLÉCHARGEMENT
+            const source = searchSourceSwitch.checked ? "franime" : "anime_sama";
+            fetch("/api/download/add", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    anime: selectedAnime,
+                    seasons: Object.keys(selectedLanguages),
+                    languages: selectedLanguages,
+                    source: source,
+                }),
+            })
+            .then(response => {
+                if (!response.ok) throw new Error("Échec de l'ajout");
+                return response.json();
+            })
+            .then(data => {
+                if (data.redirect) window.location.href = data.redirect;
+                else alert("Les saisons avec langues ajoutées au téléchargement !");
+            })
+            .catch(error => showError("Erreur : " + error.message));
+        }
+        // =========================================================
+        // ERROR
+        // =========================================================
+
+        function showError(message) {
+            const errorContainer = document.getElementById("errorContainer");
+
+            errorContainer.textContent = message;
+
+            errorContainer.style.display = "block";
+
+            setTimeout(() => {
+                errorContainer.style.display = "none";
+            }, 5000);
+        }
+
+        function hideError() {
+            document.getElementById("errorContainer").style.display = "none";
+        }
+
+        // =========================================================
+        // CLOSE MODAL WHEN CLICKING OUTSIDE
+        // =========================================================
+
+        document
+            .getElementById("anime-details-modal")
+            .addEventListener("click", (event) => {
+                if (event.target.id === "anime-details-modal") {
+                    closeAnimeDetails();
+                }
+            });
+    </script>
+
+    <style>
+
+        /* =========================================================
+           SEARCH
+           ========================================================= */
+
+        .search-page {
+            text-align: center;
+            padding: 40px 0;
+        }
+
+
+        .search-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+
+        .search-container h1 {
+            font-size: 2.5rem;
+            color: {{ theme_colors.text_primary }};
+            margin-bottom: 16px;
+        }
+
+
+        .search-description {
+            color: {{ theme_colors.text_secondary }};
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+
+        .search-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            align-items: center;
+        }
+
+
+        .search-input-container {
+            display: flex;
+            width: 100%;
+            gap: 12px;
+        }
+
+
+        .search-input {
+            flex: 1;
+            padding: 16px 24px;
+            font-size: 1rem;
+            border: 2px solid {{ theme_colors.border }};
+            border-radius: 12px;
+            background: {{ theme_colors.bg_secondary }};
+            color: {{ theme_colors.text_primary }};
+            transition: all 0.3s;
+        }
+
+
+        .search-input:focus {
+            outline: none;
+            border-color: {{ theme_colors.accent_primary }};
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+
+        .search-button {
+            padding: 16px 32px;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 12px;
+            background: {{ theme_colors.accent_primary }};
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+
+        .search-button:hover {
+            opacity: 0.9;
+        }
+
+
+        /* =========================================================
+           RESULTS GRID
+           ========================================================= */
+
+        .results-container {
+            margin-top: 40px;
+            text-align: left;
+        }
+
+
+        .results-container h2 {
+            font-size: 1.5rem;
+            color: {{ theme_colors.text_primary }};
+            margin-bottom: 20px;
+        }
+
+
+        .results-list {
+            display: grid;
+            grid-template-columns: repeat(
+                auto-fill,
+                minmax(180px, 1fr)
+            );
+            gap: 20px;
+        }
+
+
+        /* =========================================================
+           ANIME CARD
+           ========================================================= */
+
+        .planning-card {
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+
+            border: 2px solid {{ theme_colors.border }};
+            border-radius: 12px;
+
+            background: {{ theme_colors.bg_secondary }};
+
+            transition:
+                transform 0.2s ease,
+                border-color 0.2s ease,
+                box-shadow 0.2s ease;
+        }
+
+
+        .planning-card:hover {
+            transform: translateY(-5px);
+
+            border-color:
+                {{ theme_colors.accent_primary }};
+
+            box-shadow:
+                0 8px 25px rgba(0, 0, 0, 0.25);
+        }
+
+
+        .planning-card-image {
+            display: block;
+
+            width: 100%;
+            height: 260px;
+
+            object-fit: cover;
+        }
+
+
+        .planning-card-title {
+            padding: 12px 12px 4px;
+
+            color:
+                {{ theme_colors.text_primary }};
+
+            font-size: 1rem;
+            font-weight: 600;
+
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+
+        .planning-card-lang {
+            padding: 4px 12px 12px;
+
+            color:
+                {{ theme_colors.text_secondary }};
+
+            font-size: 0.9rem;
+        }
+
+
+        /* =========================================================
+           MODAL
+           ========================================================= */
+
+        .anime-details-modal {
+            position: fixed;
+            inset: 0;
+
+            z-index: 9999;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            padding: 20px;
+
+            background: rgba(0, 0, 0, 0.75);
+        }
+
+
+        .anime-details-content {
+            width: 100%;
+            max-width: 900px;
+            max-height: 90vh;
+
+            overflow: hidden;
+
+            border-radius: 16px;
+
+            background:
+                {{ theme_colors.bg_primary }};
+
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+
+        .anime-details-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            padding: 20px 24px;
+
+            border-bottom:
+                1px solid {{ theme_colors.border }};
+        }
+
+
+        .anime-details-header h3 {
+            margin: 0;
+
+            color:
+                {{ theme_colors.text_primary }};
+
+            font-size: 1.4rem;
+        }
+
+
+        .anime-details-close {
+            border: none;
+            background: transparent;
+
+            color:
+                {{ theme_colors.text_secondary }};
+
+            font-size: 2rem;
+
+            cursor: pointer;
+
+            line-height: 1;
+        }
+
+
+        .anime-details-body {
+            padding: 24px;
+
+            max-height: 65vh;
+            overflow-y: auto;
+        }
+
+
+        .anime-details-info {
+            display: flex;
+            gap: 24px;
+        }
+
+
+        .anime-details-image {
+            width: 220px;
+            height: 320px;
+
+            flex-shrink: 0;
+
+            object-fit: cover;
+
+            border-radius: 10px;
+        }
+
+
+        .anime-details-text {
+            flex: 1;
+            min-width: 0;
+        }
+
+
+        .anime-details-text h4 {
+            margin-top: 0;
+
+            color:
+                {{ theme_colors.text_primary }};
+
+            font-size: 1.5rem;
+        }
+
+
+        .anime-details-description {
+            color:
+                {{ theme_colors.text_secondary }};
+
+            line-height: 1.6;
+
+            white-space: pre-line;
+        }
+
+
+        .anime-details-section {
+            margin-top: 20px;
+
+            color:
+                {{ theme_colors.text_primary }};
+        }
+
+
+        .anime-tags {
+            display: flex;
+            flex-wrap: wrap;
+
+            gap: 8px;
+
+            margin-top: 10px;
+        }
+
+
+        .anime-tag {
+            padding: 6px 10px;
+
+            border-radius: 8px;
+
+            background:
+                {{ theme_colors.bg_secondary }};
+
+            color:
+                {{ theme_colors.text_secondary }};
+
+            font-size: 0.85rem;
+        }
+
+
+        .anime-details-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 12px;
+
+            padding: 16px 24px;
+
+            border-top:
+                1px solid {{ theme_colors.border }};
+        }
+
+
+        .anime-details-footer-left,
+        .anime-details-footer-right {
+            display: flex;
+            gap: 10px;
+        }
+
+
+        .btn {
+            padding: 10px 16px;
+
+            border: none;
+            border-radius: 8px;
+
+            background:
+                {{ theme_colors.bg_secondary }};
+
+            color:
+                {{ theme_colors.text_primary }};
+
+            cursor: pointer;
+        }
+
+
+        .btn.primary {
+            background:
+                {{ theme_colors.accent_primary }};
+
+            color: white;
+        }
+
+
+        .btn.danger {
+            background: #d32f2f;
+
+            color: white;
+        }
+
+        .season-warning {
+        margin-top: 24px;
+
+        border-top:
+            1px solid {{ theme_colors.border }};
+
+        padding-top: 16px;
+
+        color:
+            {{ theme_colors.text_secondary }};
+
+        font-size: 0.9rem;
+
+        }
+
+        .season-warning summary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+
+            cursor: pointer;
+            user-select: none;
+
+            color: {{ theme_colors.text_secondary }};
+
+            font-weight: 600;
+
+            list-style: none;
+        }
+
+        /* Remove the browser's default arrow */
+        .season-warning summary::-webkit-details-marker {
+            display: none;
+        }
+
+        /* Custom arrow */
+        .season-warning summary::after {
+            content: "▸";
+
+            font-size: 0.9rem;
+
+            transition: transform 0.2s ease;
+        }
+
+        /* Rotate arrow when opened */
+        .season-warning[open] summary::after {
+            transform: rotate(90deg);
+        }
+
+        .season-warning summary:hover {
+            color: {{ theme_colors.text_primary }};
+        }
+        /* =========================================================
+           LOADING
+           ========================================================= */
+
+        .loading-container {
+            margin-top: 24px;
+
+            color:
+                {{ theme_colors.text_secondary }};
+        }
+
+
+        .spinner {
+            border: 4px solid {{ theme_colors.border }};
+            border-top: 4px solid {{ theme_colors.accent_primary }};
+
+            border-radius: 50%;
+
+            width: 40px;
+            height: 40px;
+
+            animation: spin 1s linear infinite;
+
+            margin: 0 auto 16px;
+        }
+
+
+        @keyframes spin {
+
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+
+        }
+
+
+        /* =========================================================
+           ERROR
+           ========================================================= */
+
+        .error-container {
+            margin-top: 24px;
+
+            padding: 16px;
+
+            border: 2px solid #f44336;
+            border-radius: 12px;
+
+            background: #ffebee;
+
+            color: #c62828;
+        }
+
+
+        /* =========================================================
+           MOBILE
+           ========================================================= */
+
+        @media (max-width: 700px) {
+
+            .search-input-container {
+                flex-direction: column;
+            }
+
+
+            .results-list {
+                grid-template-columns:
+                    repeat(2, minmax(0, 1fr));
+            }
+
+
+            .planning-card-image {
+                height: 220px;
+            }
+
+
+            .anime-details-info {
+                flex-direction: column;
+            }
+
+
+            .anime-details-image {
+                width: 160px;
+                height: 230px;
+
+                margin: 0 auto;
+            }
+
+
+            .anime-details-footer {
+                flex-direction: column;
+            }
+
+
+            .anime-details-footer-left,
+            .anime-details-footer-right {
+                width: 100%;
+            }
+
+
+            .anime-details-footer button {
+                flex: 1;
+            }
+
+        }
+        /* =========================================================
+           SEARCH SOURCE SWITCH
+           ========================================================= */
+
+        .search-source-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            gap: 12px;
+
+            margin-bottom: 4px;
+        }
+
+
+        .search-source-label {
+            color:
+                {{ theme_colors.text_secondary }};
+
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+
+
+        .search-switch {
+            position: relative;
+
+            display: inline-block;
+
+            width: 52px;
+            height: 28px;
+
+            cursor: pointer;
+        }
+
+
+        .search-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+
+        .search-switch-slider {
+            position: absolute;
+            inset: 0;
+
+            border-radius: 999px;
+
+            background:
+                {{ theme_colors.border }};
+
+            transition: 0.25s ease;
+        }
+
+
+        .search-switch-slider::before {
+            content: "";
+
+            position: absolute;
+
+            width: 22px;
+            height: 22px;
+
+            left: 3px;
+            top: 3px;
+
+            border-radius: 50%;
+
+            background: white;
+
+            transition: 0.25s ease;
+        }
+
+
+        .search-switch input:checked + .search-switch-slider {
+            background:
+                {{ theme_colors.accent_primary }};
+        }
+
+
+        .search-switch input:checked + .search-switch-slider::before {
+            transform: translateX(24px);
+        }
+        .season-select {
+            border: none;
+            cursor: pointer;
+
+            transition:
+                background 0.2s ease,
+                color 0.2s ease,
+                transform 0.15s ease;
+        }
+
+        .season-select:hover {
+            transform: translateY(-2px);
+
+            background:
+                {{ theme_colors.border }};
+        }
+
+        .season-select.selected {
+            background:
+                {{ theme_colors.accent_primary }};
+
+            color: white;
+        }
+
+        .season-select.selected:hover {
+            opacity: 0.9;
+        }
+
+        .btn.add {
+            background:
+                {{ theme_colors.accent_primary }};
+
+            color: white;
+        }
+        .language-selection-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.75);
+        }
+
+        .language-selection-content {
+            background: {{ theme_colors.bg_primary }};
+            border-radius: 16px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .language-selection-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid {{ theme_colors.border }};
+        }
+
+        .language-selection-header h3 {
+            margin: 0;
+            color: {{ theme_colors.text_primary }};
+            font-size: 1.4rem;
+        }
+
+        .close-button {
+            background: transparent;
+            border: none;
+            font-size: 2rem;
+            color: {{ theme_colors.text_secondary }};
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .close-button:hover {
+            color: {{ theme_colors.text_primary }};
+        }
+
+        .language-selection-body {
+            padding: 24px;
+            max-height: 65vh;
+            overflow-y: auto;
+        }
+
+        .language-season {
+            margin-bottom: 30px;
+        }
+
+        .language-season h4 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: {{ theme_colors.text_primary }};
+            font-size: 1.2rem;
+        }
+
+        .language-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .language-options label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: {{ theme_colors.text_secondary }};
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .language-options label:hover {
+            color: {{ theme_colors.text_primary }};
+        }
+
+        .language-options input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .language-selection-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            border-top: 1px solid {{ theme_colors.border }};
+        }
+
+        .language-selection-footer .btn {
+            padding: 10px 16px;
+            background: {{ theme_colors.accent_primary }};
+            color: white;
+        }
+
+    </style>
+
+    {% endblock %} ```
+</div>

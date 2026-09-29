@@ -1,4 +1,5 @@
 import os
+from webbrowser import get
 import requests
 import re
 from urllib.parse import urlparse, urljoin
@@ -334,8 +335,28 @@ def get_anime_details(name):
             # Format: panneauAnime("Avec Fillers", "saison1/vostfr");
             # Pattern pour capturer uniquement les appels (pas la définition de fonction)
             # Exclure les lignes qui contiennent "function panneauAnime" pour éviter la définition
-            panneau_matches = re.findall(r'(?<!function\s)panneauAnime\s*\(\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\']\s*\)', script_content, re.MULTILINE | re.DOTALL)
+            # Remove JavaScript comments before parsing panneauAnime calls.
+            # This prevents commented-out seasons from being detected.
+            script_content = re.sub(
+                r'/\*.*?\*/',
+                '',
+                script_content,
+                flags=re.DOTALL
+            )
 
+            script_content = re.sub(
+                r'//.*?$',
+                '',
+                script_content,
+                flags=re.MULTILINE
+            )
+
+            # Find only active panneauAnime() calls.
+            panneau_matches = re.findall(
+                r'panneauAnime\s*\(\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\']\s*\)',
+                script_content,
+                re.MULTILINE | re.DOTALL
+            )
             if panneau_matches:
                 logger.debug(f"Appels panneauAnime trouvés dans script: {len(panneau_matches)}")
             elif 'panneauAnime' in script_content:
@@ -575,6 +596,318 @@ def get_episode_js(anime_name, anime_url, episode_js):
         logger.debug(traceback.format_exc())
         return False
 
+def get_anime_season(anime_name, anime_season_number):
+    logger = universal_logger(name="Anime-sama - Search", log_file="anime-sama.log")
+    config_path = FolderConfig.find_path(file_name="config.conf")
+    config = ConfigParser(allow_no_value=True)
+    config.read(config_path, encoding='utf-8')
+    as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
+    flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
+    flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
+    flaresolver_port = config.get("flaresolver", "port", fallback="8191")
+
+    base_url = urljoin(as_baseurl.rstrip('/') + '/', f'catalogue/{anime_name}/')
+    try:
+        logger.debug(f"Extraction des détails depuis: {url}")
+
+        # Définir les headers et data pour Flaresolver
+        data_cloudflare = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": 120000,
+            "returnOnlyCookies": False
+        }
+        headers_flaresolver = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+
+        raw_html_content = None
+
+        # Tentative de requête directe
+        try:
+            response = requests.get(url, timeout=30)
+            if response.status_code == 403:
+                logger.warning("Requête directe bloquée par Cloudflare (403). Tentative avec Flaresolver si activé.")
+            else:
+                response.raise_for_status() # Raises for other HTTP errors (e.g., 500)
+                raw_html_content = response.content
+                logger.debug("Requête directe réussie.")
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"La requête directe a échoué ({e}). Tentative avec Flaresolver si activé.")
+
+        # Si la requête directe a échoué ou a été bloquée par Cloudflare, essayer Flaresolver
+        if raw_html_content is None and flaresolver_use == "true":
+            logger.debug("Tentative de récupération via Flaresolver.")
+            try:
+                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/", headers=headers_flaresolver, json=data_cloudflare)
+                response_flaresolver.raise_for_status()
+                flaresolver_json_response = response_flaresolver.json()
+                if 'solution' in flaresolver_json_response and 'response' in flaresolver_json_response['solution']:
+                    raw_html_content = flaresolver_json_response['solution']['response']
+                    logger.debug("Flaresolver a récupéré le contenu avec succès.")
+                else:
+                    logger.error("Réponse de Flaresolver ne contient pas le contenu HTML attendu.")
+                    return None # Retourne None si le contenu HTML n'est pas trouvé
+            except Exception as e:
+                logger.error(f"Erreur lors de la requête via Flaresolver : {e}")
+                return None # Retourne None en cas d'erreur Flaresolver
+        elif raw_html_content is None and flaresolver_use != "true":
+            logger.error("La requête directe a échoué et Flaresolver est désactivé. Impossible de récupérer les détails de l'anime.")
+            return None
+
+        if raw_html_content is None:
+            logger.error("Aucun contenu HTML n'a pu être récupéré après toutes les tentatives.")
+            return None
+
+        soup = BeautifulSoup(raw_html_content, 'html.parser')
+
+
+
+
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Erreur de connexion pour '{anime_name}': {e}")
+        return None
+    except requests.exceptions.Timeout:
+        logger.error(f"Délai d'attente dépassé pour '{anime_name}'")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Erreur lors de la reqûete pour '{anime_name}': {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Erreur lors de l'extraction des détails pour '{anime_name}': {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
+        return None
+
+
+
+
+
+
+
+
+
+
+
+
+    results = []
+    for season in anime_season_number:
+        logger.info(f"{season}")
+        url = urljoin(as_baseurl.rstrip('/') + '/', f'catalogue/{anime_name}/saison{season}/vostfr')
+        logger.info(f"{url}")
+
+        try:
+            logger.debug(f"Extraction des détails depuis: {url}")
+
+            # Définir les headers et data pour Flaresolver
+            data_cloudflare = {
+                "cmd": "request.get",
+                "url": url,
+                "maxTimeout": 120000,
+                "returnOnlyCookies": False
+            }
+            headers_flaresolver = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+
+            raw_html_content = None
+
+            # Tentative de requête directe
+            try:
+                response = requests.get(url, timeout=30)
+                if response.status_code == 403:
+                    logger.warning("Requête directe bloquée par Cloudflare (403). Tentative avec Flaresolver si activé.")
+                else:
+                    response.raise_for_status() # Raises for other HTTP errors (e.g., 500)
+                    raw_html_content = response.content
+                    logger.debug("Requête directe réussie.")
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"La requête directe a échoué ({e}). Tentative avec Flaresolver si activé.")
+
+            # Si la requête directe a échoué ou a été bloquée par Cloudflare, essayer Flaresolver
+            if raw_html_content is None and flaresolver_use == "true":
+                logger.debug("Tentative de récupération via Flaresolver.")
+                try:
+                    response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/", headers=headers_flaresolver, json=data_cloudflare)
+                    response_flaresolver.raise_for_status()
+                    flaresolver_json_response = response_flaresolver.json()
+                    if 'solution' in flaresolver_json_response and 'response' in flaresolver_json_response['solution']:
+                        raw_html_content = flaresolver_json_response['solution']['response']
+                        logger.debug("Flaresolver a récupéré le contenu avec succès.")
+                    else:
+                        logger.error("Réponse de Flaresolver ne contient pas le contenu HTML attendu.")
+                        return None # Retourne None si le contenu HTML n'est pas trouvé
+                except Exception as e:
+                    logger.error(f"Erreur lors de la requête via Flaresolver : {e}")
+                    return None # Retourne None en cas d'erreur Flaresolver
+            elif raw_html_content is None and flaresolver_use != "true":
+                logger.error("La requête directe a échoué et Flaresolver est désactivé. Impossible de récupérer les détails de l'anime.")
+                return None
+
+            if raw_html_content is None:
+                logger.error("Aucun contenu HTML n'a pu être récupéré après toutes les tentatives.")
+                return None
+
+            soup = BeautifulSoup(raw_html_content, 'html.parser')
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Erreur de connexion pour '{anime_name}': {e}")
+            return None
+        except requests.exceptions.Timeout:
+            logger.error(f"Délai d'attente dépassé pour '{anime_name}'")
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Erreur lors de la reqûete pour '{anime_name}': {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Erreur lors de l'extraction des détails pour '{anime_name}': {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
+            return None
+
+         # Recherche des conteneurs de langues
+        language_container = soup.find('div', class_='flex flex-wrap justify-start mb-5')
+        if not language_container:
+            logger.error(f"Conteneur de langues non trouvé pour {anime_name} saison {season}")
+            continue
+
+        # Extraction des langues DISPONIBLES (ignore les éléments masqués)
+        available_languages = []
+        for lang_link in language_container.find_all('a', href=True):
+            # 🔥 CORRECTION 2 : CHECK PYTHON VALIDE
+            logger.info(f"LANGUE BRUTE -> href={lang_link.get('href')} " f"class={lang_link.get('class')} "f"style={lang_link.get('style')}")
+            style = lang_link.get('style', '').lower()
+            classes = lang_link.get('class', [])
+
+            is_hidden = ('hidden' in classes or 'display: none' in style)
+
+            if is_hidden:
+                continue
+
+            lang_code = lang_link['href'].rstrip('/').split('/')[-1]
+            if lang_code and lang_code not in available_languages:
+                available_languages.append(lang_code)
+                logger.debug(f"Langue détectée : {lang_code}")
+
+        # 🔥 CORRECTION 3 : AJOUTER RÉELLEMENT AU RESULTAT
+        results.append({"season": season,"languages": available_languages})
+        logger.info(f"Saison {season} : {len(available_languages)} langue(s) → {available_languages}")
+
+    return results
+
+def search_anime(value):
+    logger = universal_logger(name="Anime-sama - Search",log_file="anime-sama.log")
+    config_path = FolderConfig.find_path(file_name="config.conf")
+    config = ConfigParser(allow_no_value=True)
+    config.read(config_path, encoding='utf-8')
+    as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
+    flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
+    flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
+    flaresolver_port = config.get("flaresolver", "port", fallback="8191")
+
+    url = urljoin(as_baseurl.rstrip('/') + '/', f'catalogue/?type[]=Anime&annee_min=&annee_max=&episodes_min=&episodes_max=&chapitres_min=&chapitres_max=&search={value}&page=1')
+    logger.debug(f"{url}")
+
+    try:
+        logger.debug(f"Extraction des détails depuis: {url}")
+
+        # Définir les headers et data pour Flaresolver
+        data_cloudflare = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": 120000,
+            "returnOnlyCookies": False
+        }
+        headers_flaresolver = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+
+        raw_html_content = None
+
+        # Tentative de requête directe
+        try:
+            response = requests.get(url, timeout=30)
+            if response.status_code == 403:
+                logger.warning("Requête directe bloquée par Cloudflare (403). Tentative avec Flaresolver si activé.")
+            else:
+                response.raise_for_status() # Raises for other HTTP errors (e.g., 500)
+                raw_html_content = response.content
+                logger.debug("Requête directe réussie.")
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"La requête directe a échoué ({e}). Tentative avec Flaresolver si activé.")
+
+        # Si la requête directe a échoué ou a été bloquée par Cloudflare, essayer Flaresolver
+        if raw_html_content is None and flaresolver_use == "true":
+            logger.debug("Tentative de récupération via Flaresolver.")
+            try:
+                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/", headers=headers_flaresolver, json=data_cloudflare)
+                response_flaresolver.raise_for_status()
+                flaresolver_json_response = response_flaresolver.json()
+                if 'solution' in flaresolver_json_response and 'response' in flaresolver_json_response['solution']:
+                    raw_html_content = flaresolver_json_response['solution']['response']
+                    logger.debug("Flaresolver a récupéré le contenu avec succès.")
+                else:
+                    logger.error("Réponse de Flaresolver ne contient pas le contenu HTML attendu.")
+                    return None # Retourne None si le contenu HTML n'est pas trouvé
+            except Exception as e:
+                logger.error(f"Erreur lors de la requête via Flaresolver : {e}")
+                return None # Retourne None en cas d'erreur Flaresolver
+        elif raw_html_content is None and flaresolver_use != "true":
+            logger.error("La requête directe a échoué et Flaresolver est désactivé. Impossible de récupérer les détails de l'anime.")
+            return None
+
+        if raw_html_content is None:
+            logger.error("Aucun contenu HTML n'a pu être récupéré après toutes les tentatives.")
+            return None
+
+        soup = BeautifulSoup(raw_html_content, 'html.parser')
+
+        # Extraction de tous les href des catalog cards
+
+        catalog_hrefs = []
+        for card in soup.find_all('a', href=True):
+            href = card.get('href', '')
+
+            if '/catalogue/' in href:
+                catalog_hrefs.append(href)
+
+        logger.debug(f"Nombre de catalog cards trouvées : {len(catalog_hrefs)}")
+        logger.debug(f"Catalog cards: {catalog_hrefs}")
+
+        anime_detail = []
+        for url in catalog_hrefs:
+            name = url.split('/catalogue/')[-1].strip('/')
+
+            anime = get_anime_details(name)
+
+            if anime:
+                anime["url"] = url
+
+            anime_detail.append(anime)
+
+        logger.debug(f"Catalog cards: {anime_detail}")
+        return anime_detail
+
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Erreur de connexion pour '{anime_name}': {e}")
+        return None
+    except requests.exceptions.Timeout:
+        logger.error(f"Délai d'attente dépassé pour '{anime_name}'")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Erreur lors de la requête pour '{anime_name}': {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Erreur lors de l'extraction des détails pour '{anime_name}': {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
+        return None
 
 class get_anime_episodes_url:
     """
