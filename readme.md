@@ -41,7 +41,7 @@ Créez un fichier `docker-compose.yml` avec le contenu suivant :
 ```yaml
 services:
   anime-sama_downloader:
-    image: maddoxtes/plex-anime-downloader:beta-0.9.0
+    image: maddoxtes/plex-anime-downloader:beta-0.8.1
 
     volumes:
       - /chemin/vers/vos/donnees:/mnt/user/appdata/anime-downloader
@@ -138,7 +138,7 @@ Vous pourrez ensuite configurer l'application depuis l'interface web.
 
 ## 📖 Tutoriel
 
-[Comment installer et télécharger des animes avec la version beta-0.9.0]()
+[Comment installer et télécharger des animes avec la version beta-0.8.1]()
 
 ## 🐛 Problèmes et bugs
 
@@ -148,4 +148,3 @@ Si vous rencontrez un problème avec l'application Docker ou si vous trouvez un 
 
 - [GitHub](https://github.com/maddoxtes1/Plex-Anime-Downloader)
 - [Docker Hub](https://hub.docker.com/r/maddoxtes/plex-anime-downloader)
-- [Patch notes](https://git.maddoxserv.com/maddox/Plex-Anime-Downloader/releases)
