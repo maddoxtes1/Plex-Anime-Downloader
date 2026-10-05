@@ -21,8 +21,9 @@ class function:
         config = ConfigParser(allow_no_value=True)
         config.read(config_path, encoding='utf-8')
         flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
-        flaresolver_port = config.get("flaresolver", "port", fallback="8191")
+        flaresolver_port = config .get("flaresolver", "port", fallback="8191")
         try:
+            import requests
             response = requests.get(f"http://{flaresolver_host}:{flaresolver_port}/health")
             return response.status_code == 200
         except Exception as e:
@@ -496,7 +497,6 @@ class stream_manager:
         self.logger = universal_logger(name="Stream Manager", log_file="sys.log")
         self.function = function()
         self.queue = queue
-
         self.run()
 
     def run(self):
@@ -505,15 +505,16 @@ class stream_manager:
             config = ConfigParser(allow_no_value=True)
             config.read(config_path, encoding='utf-8')
 
-            flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
-            if flaresolver_use == "true":
+            self.flaresolver_use = False
+
+            flaresolver_use = config.get("flaresolver", "use_flaresolver")
+            if flaresolver_use == "True":
                 if self.function.try_flaresolver() == False:
                     self.logger.error("Flaresolver est pas accessible, on skip")
-                    flaresolver_use = "false"
+                else:
+                    self.flaresolver_use = True
             else:
                 self.logger.info("Flaresolver est désactivé, on skip")
-                flaresolver_use = "false"
-
             planning_scan = self.function.planning_scan()
             planning_scan.run()
 
@@ -525,7 +526,7 @@ class stream_manager:
             if anime_sama_scan == "True":
                 anime_sama(anime_sama_list, self.queue)
 
-            if flaresolver_use == "true":
+            if self.flaresolver_use:
                 if franime_scan == "True":
                     franime(franime_list, self.queue)
 

@@ -10,6 +10,40 @@ from typing import Union, Dict, List, Any, Optional
 from .config import _ENV_CONFIG, _Folder_Config, _File_Config
 
 
+class flaresolver:
+    def __init__(self):
+        from configparser import ConfigParser
+        self.logger = universal_logger("System", "sys.log")
+
+        config_path = FolderConfig.find_path(file_name="config.conf")
+        self.config = ConfigParser(allow_no_value=True)
+        self.config.read(config_path, encoding='utf-8')
+
+        self.flaresolver_use = False
+
+        flaresolver_use = self.config.get("flaresolver", "use_flaresolver")
+        if flaresolver_use == "True":
+            if self.try_flaresolver() == False:
+                self.logger.error("Flaresolver est pas accessible, on skip")
+            else:
+                self.logger.info("Flaresolver est connectée")
+                self.flaresolver_use = True
+
+    def try_flaresolver(self):
+        self.logger.info(msg="Sleep 3s pour Flaresolver")
+        time.sleep(3)
+
+        flaresolver_host = self.config.get("flaresolver", "host", fallback="flaresolver")
+        flaresolver_port = self.config .get("flaresolver", "port", fallback="8191")
+        try:
+            import requests
+            response = requests.get(f"http://{flaresolver_host}:{flaresolver_port}/health")
+            return response.status_code == 200
+        except Exception as e:
+            self.logger.error(f"Flaresolver est pas accessible: {flaresolver_host}:{flaresolver_port} - {e}")
+            return False
+
+
 class EnvConfig:
     """Classe pour gérer les variables d'environnement."""
 

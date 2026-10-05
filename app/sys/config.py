@@ -1,7 +1,7 @@
 _ENV_CONFIG = {
     "plex_anime_downloader_V": {
         "env_var": "PLEX_ANIME_DOWNLOADER_V",
-        "default": "Beta-0.8.1",
+        "default": "Beta-0.8.2",
         "type": str,
         "use_default": True
     },
@@ -107,7 +107,7 @@ _File_Config = {
     ".env": {
         "type": "env",
         "default": {
-            "Version": "Beta-0.8.1"
+            "Version": "Beta-0.8.2"
         }
     },
     "config.conf": {

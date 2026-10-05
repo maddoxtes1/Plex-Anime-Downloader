@@ -1,4 +1,4 @@
-from app.sys import FolderConfig, universal_logger, LoggerConfig
+from app.sys import FolderConfig, universal_logger, LoggerConfig, flaresolver
 from app.flask import flask_manager
 from app.queue.manager import queues
 from app.streaming import stream_manager
@@ -15,6 +15,9 @@ class App:
 
         flask_manager()
         self.logger.info(msg="Flask manager initialized")
+
+        self.logger.info(msg="Essaye de Flaresolver")
+        flaresolvers = flaresolver()
 
         stream_manager(queue=queue_manager)
         self.logger.info(msg="Streaming manager initialized")
