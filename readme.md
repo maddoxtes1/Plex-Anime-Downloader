@@ -11,7 +11,7 @@ J'ai donc créé ce projet avec une interface web permettant de rechercher et t�
 - ✅ Téléchargement automatique des animes
 - ✅ Téléchargement depuis plusieurs sites de streaming
   - Anime-Sama
-  - Franime
+  - Franime (Flaresolver)
 - ✅ Interface web pour gérer les téléchargements
 - ✅ Organisation des fichiers pour Plex/Emby
 
@@ -29,6 +29,7 @@ L'application peut être utilisée avec :
 
 - Docker
 - Docker Compose
+- [Flaresolver](https://github.com/Flaresolverr/Flaresolverr)
 
 > 💡 Une bibliothèque Plex, Emby ou Jellyfin **n'est pas obligatoire**. Elle est uniquement nécessaire si vous souhaitez organiser automatiquement les fichiers téléchargés dans votre bibliothèque multimédia.
 
@@ -44,7 +45,7 @@ services:
     image: maddoxtes/plex-anime-downloader:beta-0.8.1
 
     volumes:
-      - /chemin/vers/vos/donnees:/mnt/user/appdata/anime-downloader
+      - /chemin/vers/vos/donnees:/mnt/user/appdata/plex-anime-downloader
       - /chemin/vers/votre/bibliotheque/plex:/mnt/user/appdata/plex
 
     environment:
@@ -54,12 +55,39 @@ services:
       - "5000:5000"
 ```
 
+Avec Flaresolver:
+```yaml
+services:
+  flaresolver:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolver
+    environment:
+      - LOG_LEVEL=info
+      - TZ=Europe/Paris
+    ports:
+      - "8191:8191"
+    restart: unless-stopped
+  anime-sama_downloader:
+    image: maddoxtes/plex-anime-downloader:beta-0.8.1
+
+    volumes:
+      - /chemin/vers/vos/donnees:/mnt/user/appdata/plex-anime-downloader
+      - /chemin/vers/votre/bibliotheque/plex:/mnt/user/appdata/plex
+
+    environment:
+      - LOCAL_ADMIN_PASSWORD=votre_mot_de_passe_securise
+
+    ports:
+      - "5000:5000"
+```
+
+
 ### 📁 Volumes
 
 #### Données de l'application
 
 ```yaml
-- /chemin/vers/vos/donnees:/mnt/user/appdata/anime-downloader
+- /chemin/vers/vos/donnees:/mnt/user/appdata/plex-anime-downloader
 ```
 
 Ce dossier contient les données et la configuration de l'application.
