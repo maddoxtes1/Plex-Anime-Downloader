@@ -608,12 +608,12 @@ def get_anime_season(anime_name, anime_season_number):
 
     base_url = urljoin(as_baseurl.rstrip('/') + '/', f'catalogue/{anime_name}/')
     try:
-        logger.debug(f"Extraction des détails depuis: {url}")
+        logger.debug(f"Extraction des détails depuis: {base_url}")
 
         # Définir les headers et data pour Flaresolver
         data_cloudflare = {
             "cmd": "request.get",
-            "url": url,
+            "url": base_url,
             "maxTimeout": 120000,
             "returnOnlyCookies": False
         }
@@ -627,7 +627,7 @@ def get_anime_season(anime_name, anime_season_number):
 
         # Tentative de requête directe
         try:
-            response = requests.get(url, timeout=30)
+            response = requests.get(base_url, timeout=30)
             if response.status_code == 403:
                 logger.warning("Requête directe bloquée par Cloudflare (403). Tentative avec Flaresolver si activé.")
             else:
@@ -663,8 +663,32 @@ def get_anime_season(anime_name, anime_season_number):
 
         soup = BeautifulSoup(raw_html_content, 'html.parser')
 
-
-
+        # Recherche de l'élément correspondant à la saison demandée
+        season_key = f"saison{anime_season_number}"
+        
+        # Chercher les éléments avec des attributs href contenant la saison
+        for link in soup.find_all('a', href=True):
+            href = link.get('href')
+            if season_key in href:
+                # Extraire le language après le slash
+                parts = href.split('/')
+                if len(parts) > 1:
+                    lang = parts[-1]  # Le dernier élément est le language
+                    logger.debug(f"Trouvé le language pour la saison {anime_season_number}: {lang}")
+                    return lang
+        
+        # Si on n'a pas trouvé avec la saison, chercher tous les liens vostfr
+        for link in soup.find_all('a', href=True):
+            href = link.get('href')
+            if 'vostfr' in href:
+                parts = href.split('/')
+                if len(parts) > 1:
+                    lang = parts[-1]
+                    logger.debug(f"Trouvé le language par défaut vostfr: {lang}")
+                    return lang
+        
+        logger.warning(f"Aucun language trouvé pour la saison {anime_season_number} ou vostfr par défaut")
+        return None
 
     except requests.exceptions.ConnectionError as e:
         logger.error(f"Erreur de connexion pour '{anime_name}': {e}")
