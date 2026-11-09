@@ -1,7 +1,20 @@
+import os
+import threading
 import json
 
 from .system import universal_logger
 
+_DATABASE_LOCKS = {}
+_DATABASE_LOCKS_GUARD = threading.Lock()
+
+def get_database_lock(path):
+    path = os.path.abspath(path)
+
+    with _DATABASE_LOCKS_GUARD:
+        if path not in _DATABASE_LOCKS:
+            _DATABASE_LOCKS[path] = threading.RLock()
+
+        return _DATABASE_LOCKS[path]
 
 class BaseDatabase:
     """
@@ -20,6 +33,7 @@ class BaseDatabase:
         if database_path is None:
             raise ValueError(f"Le chemin du fichier de base de données n'est pas défini pour {logger_name}")
         self.database_path = database_path
+        self._lock = get_database_lock(self.database_path)
         self.logger = universal_logger(logger_name, "sys.log")
         self.allow_file_not_found = allow_file_not_found
 
@@ -34,20 +48,21 @@ class BaseDatabase:
             Le fichier utilisé est défini par self.database_path (initialisé dans __init__)
         """
         try:
-            self.logger.debug(f"Lecture de la base de données depuis: {self.database_path}")
-            with open(self.database_path, 'r', encoding='utf-8') as json_file:
-                data = json.load(json_file)
+            with self._lock:
+                self.logger.debug(f"Lecture de la base de données depuis: {self.database_path}")
+                with open(self.database_path, 'r', encoding='utf-8') as json_file:
+                    data = json.load(json_file)
                 self.logger.debug(f"Base de données lue avec succès depuis: {self.database_path}")
                 return data
         except FileNotFoundError:
             if self.allow_file_not_found:
                 # Si le fichier n'existe pas et que c'est autorisé, retourner un dictionnaire vide
                 self.logger.debug(f"Fichier '{self.database_path}' non trouvé, retour d'un dictionnaire vide")
-                return {}
+                raise
             raise
         except Exception as e:
             self.logger.error(f"Erreur lors de la lecture de la base de données depuis '{self.database_path}': {e}")
-            return {}
+            raise
 
     def save_database(self, data):
         """
@@ -60,10 +75,14 @@ class BaseDatabase:
             Le fichier utilisé est défini par self.database_path (initialisé dans __init__)
         """
         try:
-            self.logger.debug(f"Sauvegarde de la base de données dans: {self.database_path}")
-            with open(self.database_path, 'w', encoding='utf-8') as json_file:
-                json.dump(data, json_file, indent=4, ensure_ascii=False)
-            self.logger.debug(f"Base de données sauvegardée avec succès dans: {self.database_path}")
+            with self._lock:
+                self.logger.debug(f"[DB SAVE START] "f"Thread={threading.current_thread().name} "f"ID={threading.get_ident()} "f"Path={os.path.abspath(self.database_path)}")
+
+                self.logger.debug(f"Sauvegarde de la base de données dans: {self.database_path}")
+                with open(self.database_path, 'w', encoding='utf-8') as json_file:
+                    json.dump(data, json_file, indent=4, ensure_ascii=False)
+                self.logger.debug(f"Base de données sauvegardée avec succès dans: {self.database_path}")
+                self.logger.debug(f"[DB SAVE END] "f"Thread={threading.current_thread().name} " f"ID={threading.get_ident()}")
         except Exception as e:
             self.logger.error(f"Erreur lors de la sauvegarde de la base de données dans '{self.database_path}': {e}")
 
@@ -158,11 +177,12 @@ class anime_data_database(BaseDatabase):
         Args:
             path_name (str): Le nom du chemin à ajouter
         """
-        data = self._read_database()
-        if path_name not in data:
-            data[path_name] = {}
-            self.save_database(data)
-            self.logger.debug(f"Chemin '{path_name}' ajouté avec succès")
+        with self._lock:
+            data = self._read_database()
+            if path_name not in data:
+                data[path_name] = {}
+                self.save_database(data)
+                self.logger.debug(f"Chemin '{path_name}' ajouté avec succès")
 
     def delete_path(self, path_name):
         """
@@ -171,11 +191,12 @@ class anime_data_database(BaseDatabase):
         Args:
             path_name (str): Le nom du chemin à supprimer
         """
-        data = self._read_database()
-        if path_name in data:
-            del data[path_name]
-            self.save_database(data)
-            self.logger.debug(f"Chemin '{path_name}' supprimé avec succès")
+        with self._lock:
+            data = self._read_database()
+            if path_name in data:
+                del data[path_name]
+                self.save_database(data)
+                self.logger.debug(f"Chemin '{path_name}' supprimé avec succès")
 
     def add_series(self, path_name, series_name):
         """
@@ -186,12 +207,13 @@ class anime_data_database(BaseDatabase):
             path_name (str): Le nom du chemin où ajouter la série
             series_name (str): Le nom de la série à ajouter
         """
-        data = self._read_database()
-        if self._verify_path(data, path_name):
-            if series_name not in data[path_name]:
-                data[path_name][series_name] = {}
-                self.save_database(data)
-                self.logger.debug(f"Série '{series_name}' ajoutée avec succès dans le chemin '{path_name}'")
+        with self._lock:
+            data = self._read_database()
+            if self._verify_path(data, path_name):
+                if series_name not in data[path_name]:
+                    data[path_name][series_name] = {}
+                    self.save_database(data)
+                    self.logger.debug(f"Série '{series_name}' ajoutée avec succès dans le chemin '{path_name}'")
 
     def add_season(self, path_name, series_name, season_name):
         """
@@ -203,12 +225,13 @@ class anime_data_database(BaseDatabase):
             series_name (str): Le nom de la série
             season_name (str): Le nom de la saison à ajouter
         """
-        data = self._read_database()
-        if self._verify_series(data, path_name, series_name):
-            if season_name not in data[path_name][series_name]:
-                data[path_name][series_name][season_name] = {}
-                self.save_database(data)
-                self.logger.debug(f"Saison '{season_name}' ajoutée avec succès dans la série '{series_name}' dans le chemin '{path_name}'")
+        with self._lock:
+            data = self._read_database()
+            if self._verify_series(data, path_name, series_name):
+                if season_name not in data[path_name][series_name]:
+                    data[path_name][series_name][season_name] = {}
+                    self.save_database(data)
+                    self.logger.debug(f"Saison '{season_name}' ajoutée avec succès dans la série '{series_name}' dans le chemin '{path_name}'")
 
     def add_episode(self, path_name, series_name, season_name, episode_list):
         """
@@ -225,21 +248,22 @@ class anime_data_database(BaseDatabase):
                 - episode_status (str): Le statut de l'épisode (ex: "not_downloaded", "downloaded")
                 - episode_url (list): Liste des URLs de l'épisode pour chaque domaine
         """
-        data = self._read_database()
-        if self._verify_season(data, path_name, series_name, season_name):
-            episode_name, episode_status, episode_url = episode_list
-            if episode_name not in data[path_name][series_name][season_name]:
-                data[path_name][series_name][season_name][episode_name] = {
-                    "status": episode_status,
-                    "url": episode_url
-                }
-            else:
-                data[path_name][series_name][season_name][episode_name] = {
-                    "status": episode_status,
-                    "url": episode_url
-                }
-            self.save_database(data)
-            self.logger.debug(f"Episode '{episode_name}' ajouté/modifier avec succès dans la saison '{season_name}' dans la série '{series_name}' dans le chemin '{path_name}'")
+        with self._lock:
+            data = self._read_database()
+            if self._verify_season(data, path_name, series_name, season_name):
+                episode_name, episode_status, episode_url = episode_list
+                if episode_name not in data[path_name][series_name][season_name]:
+                    data[path_name][series_name][season_name][episode_name] = {
+                        "status": episode_status,
+                        "url": episode_url
+                    }
+                else:
+                    data[path_name][series_name][season_name][episode_name] = {
+                        "status": episode_status,
+                        "url": episode_url
+                    }
+                self.save_database(data)
+                self.logger.debug(f"Episode '{episode_name}' ajouté/modifier avec succès dans la saison '{season_name}' dans la série '{series_name}' dans le chemin '{path_name}'")
 
     def get_episode(self, path_name, series_name, season_name):
         """
@@ -263,19 +287,20 @@ class anime_data_database(BaseDatabase):
         return episodes
 
     def update_episode_status(self, path_name, series_name, season_name, episode_name, episode_status):
-        data = self._read_database()
-        if self._verify_season(data, path_name, series_name, season_name):
-            if episode_name not in data[path_name][series_name][season_name]:
-                self.logger.debug(f"Episode {episode_name} existe pas")
-                return
+        with self._lock:
+            data = self._read_database()
+            if self._verify_season(data, path_name, series_name, season_name):
+                if episode_name not in data[path_name][series_name][season_name]:
+                    self.logger.debug(f"Episode {episode_name} existe pas")
+                    return
 
-            episode_data = data[path_name][series_name][season_name][episode_name]
-            data[path_name][series_name][season_name][episode_name] = {
-                "status": episode_status,
-                "url": episode_data.get("url", "")
-            }
-            self.save_database(data)
-            self.logger.debug(f"le status a ete update pour cette episode {episode_status}")
+                episode_data = data[path_name][series_name][season_name][episode_name]
+                data[path_name][series_name][season_name][episode_name] = {
+                    "status": episode_status,
+                    "url": episode_data.get("url", "")
+                }
+                self.save_database(data)
+                self.logger.debug(f"le status a ete update pour cette episode {episode_status}")
 
     def get_unistalled_episode(self, path_list):
         """
@@ -349,10 +374,11 @@ class anime_details_database(BaseDatabase):
             anime_name (str): Nom de l'anime
             details (dict): Dictionnaire contenant 'title', 'image', 'description', 'genres', 'seasons', 'seasons_count'
         """
-        data = self._read_database()
-        data[anime_name] = details
-        self.save_database(data)
-        self.logger.debug(f"Détails de '{anime_name}' sauvegardés dans le cache")
+        with self._lock:
+            data = self._read_database()
+            data[anime_name] = details
+            self.save_database(data)
+            self.logger.debug(f"Détails de '{anime_name}' sauvegardés dans le cache")
 
     def update_anime_details(self, anime_name, details):
         """
@@ -362,14 +388,15 @@ class anime_details_database(BaseDatabase):
             anime_name (str): Nom de l'anime
             details (dict): Dictionnaire contenant les nouvelles informations
         """
-        data = self._read_database()
-        if anime_name in data:
-            data[anime_name].update(details)
-            self.save_database(data)
-            self.logger.debug(f"Détails de '{anime_name}' mis à jour dans le cache")
-        else:
-            self.logger.warning(f"Tentative de mise à jour de '{anime_name}' qui n'existe pas. Utilisation de save_anime_details.")
-            self.save_anime_details(anime_name, details)
+        with self._lock:
+            data = self._read_database()
+            if anime_name in data:
+                data[anime_name].update(details)
+                self.save_database(data)
+                self.logger.debug(f"Détails de '{anime_name}' mis à jour dans le cache")
+            else:
+                self.logger.warning(f"Tentative de mise à jour de '{anime_name}' qui n'existe pas. Utilisation de save_anime_details.")
+                self.save_anime_details(anime_name, details)
 
     def delete_anime_details(self, anime_name):
         """
@@ -378,13 +405,14 @@ class anime_details_database(BaseDatabase):
         Args:
             anime_name (str): Nom de l'anime à supprimer
         """
-        data = self._read_database()
-        if anime_name in data:
-            del data[anime_name]
-            self.save_database(data)
-            self.logger.debug(f"Détails de '{anime_name}' supprimés du cache")
-        else:
-            self.logger.warning(f"Tentative de suppression de '{anime_name}' qui n'existe pas dans le cache")
+        with self._lock:
+            data = self._read_database()
+            if anime_name in data:
+                del data[anime_name]
+                self.save_database(data)
+                self.logger.debug(f"Détails de '{anime_name}' supprimés du cache")
+            else:
+                self.logger.warning(f"Tentative de suppression de '{anime_name}' qui n'existe pas dans le cache")
 
     def get_all_anime_names(self):
         """
@@ -398,6 +426,7 @@ class anime_details_database(BaseDatabase):
 
     def clear_cache(self):
         """Vide complètement le cache des détails d'anime"""
-        data = {}
-        self.save_database(data)
-        self.logger.info("Cache des détails d'anime vidé")
+        with self._lock:
+            data = {}
+            self.save_database(data)
+            self.logger.info("Cache des détails d'anime vidé")
