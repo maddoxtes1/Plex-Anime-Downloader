@@ -6,6 +6,7 @@ Système universel qui peut déplacer des valeurs entre fichiers, supprimer des 
 import configparser
 import json
 import os
+import sqlite3
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -344,6 +345,27 @@ _MIGRATIONS = {
                     "key": "port"
                 },
                 "remove_from_source": True
+            }
+        ]
+    },
+    "Beta-0.8.4": {
+        "description": "Migration vers Beta-0.8.4 - Les bases de données JSON (anime_data, anime_details) passent à SQLite",
+        "changes": [
+            {
+                "type": "run_script",
+                "description": "Convertir anime_data.json en base SQLite anime_data.db",
+                "script": "json_to_sqlite_anime_data",
+                "params": {
+                    "json_file": ";datapath;/database/anime_data.json"
+                }
+            },
+            {
+                "type": "run_script",
+                "description": "Convertir anime_details.json en base SQLite anime_details.db",
+                "script": "json_to_sqlite_anime_details",
+                "params": {
+                    "json_file": ";datapath;/database/anime_details.json"
+                }
             }
         ]
     }
@@ -714,6 +736,128 @@ def _migrate_config_conf_rename(config_path: Path, change: Dict) -> bool:
     return False
 
 
+def _log(logger, level: str, message: str):
+    """Écrit dans le logger s'il existe."""
+    if logger:
+        getattr(logger, level)(message)
+
+
+def _script_json_to_sqlite_anime_data(json_file: str, base_path: Optional[Path] = None, logger=None) -> bool:
+    """
+    Script de migration : importe anime_data.json dans anime_data.db (SQLite).
+
+    - Fusionne sans écraser (INSERT OR IGNORE) : sans danger si relancé plusieurs fois.
+    - Tout est importé dans une seule transaction : en cas d'erreur, rien n'est à moitié importé.
+    - Une fois l'import réussi, le JSON est renommé en .json.bak.
+
+    Returns:
+        bool: True si l'import a été fait
+    """
+    from .database import anime_data_database
+
+    json_path = _resolve_file_path_with_env(json_file, base_path)
+    if not json_path or not json_path.exists():
+        _log(logger, "info", "  ⚠ Aucun fichier JSON à convertir, ignoré")
+        return False
+
+    data = _read_json_file(json_path)
+    if not isinstance(data, dict):
+        _log(logger, "error", f"  ✗ '{json_path.name}' illisible ou invalide, conversion annulée")
+        return False
+
+    db_path = json_path.with_suffix(".db")
+    anime_data_database(database_path=str(db_path))  # crée les tables si elles n'existent pas
+
+    conn = sqlite3.connect(str(db_path), timeout=30)
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        with conn:
+            for path_name, series_dict in data.items():
+                if not isinstance(series_dict, dict):
+                    continue
+                conn.execute("INSERT OR IGNORE INTO paths (name) VALUES (?)", (path_name,))
+
+                for series_name, seasons_dict in series_dict.items():
+                    if not isinstance(seasons_dict, dict):
+                        continue
+                    conn.execute(
+                        "INSERT OR IGNORE INTO series (path_name, name) VALUES (?, ?)", (path_name, series_name)
+                    )
+                    series_id = conn.execute(
+                        "SELECT id FROM series WHERE path_name = ? AND name = ?", (path_name, series_name)
+                    ).fetchone()[0]
+
+                    for season_name, episodes_dict in seasons_dict.items():
+                        if not isinstance(episodes_dict, dict):
+                            continue
+                        conn.execute(
+                            "INSERT OR IGNORE INTO seasons (series_id, name) VALUES (?, ?)", (series_id, season_name)
+                        )
+                        season_id = conn.execute(
+                            "SELECT id FROM seasons WHERE series_id = ? AND name = ?", (series_id, season_name)
+                        ).fetchone()[0]
+
+                        for episode_name, episode_data in episodes_dict.items():
+                            if not isinstance(episode_data, dict):
+                                continue
+                            conn.execute(
+                                "INSERT OR IGNORE INTO episodes (season_id, name, status, url) VALUES (?, ?, ?, ?)",
+                                (
+                                    season_id,
+                                    episode_name,
+                                    episode_data.get("status", "not_downloaded"),
+                                    json.dumps(episode_data.get("url", []), ensure_ascii=False),
+                                )
+                            )
+    finally:
+        conn.close()
+
+    os.replace(json_path, str(json_path) + ".bak")
+    _log(logger, "info", f"  ✓ '{json_path.name}' importé dans '{db_path.name}' (ancien fichier renommé en .json.bak)")
+    return True
+
+
+def _script_json_to_sqlite_anime_details(json_file: str, base_path: Optional[Path] = None, logger=None) -> bool:
+    """
+    Script de migration : importe anime_details.json dans anime_details.db (SQLite).
+    Les animes déjà présents dans la base ne sont pas écrasés.
+
+    Returns:
+        bool: True si l'import a été fait
+    """
+    from .database import anime_details_database
+
+    json_path = _resolve_file_path_with_env(json_file, base_path)
+    if not json_path or not json_path.exists():
+        _log(logger, "info", "  ⚠ Aucun fichier JSON à convertir, ignoré")
+        return False
+
+    data = _read_json_file(json_path)
+    if not isinstance(data, dict):
+        _log(logger, "error", f"  ✗ '{json_path.name}' illisible ou invalide, conversion annulée")
+        return False
+
+    db_path = json_path.with_suffix(".db")
+    db = anime_details_database(database_path=str(db_path))
+
+    for anime_name, details in data.items():
+        if isinstance(details, dict) and db.get_anime_details(anime_name) is None:
+            db.save_anime_details(anime_name, details)
+
+    os.replace(json_path, str(json_path) + ".bak")
+    _log(logger, "info", f"  ✓ '{json_path.name}' importé dans '{db_path.name}' (ancien fichier renommé en .json.bak)")
+    return True
+
+
+# Registre des scripts utilisables avec {"type": "run_script", "script": "<nom>", "params": {...}}
+# Pour ajouter un script : écrire une fonction (..., base_path=None, logger=None) -> bool
+# qui retourne True si elle a fait quelque chose, puis l'ajouter ici.
+_MIGRATION_SCRIPTS = {
+    "json_to_sqlite_anime_data": _script_json_to_sqlite_anime_data,
+    "json_to_sqlite_anime_details": _script_json_to_sqlite_anime_details,
+}
+
+
 def run_migration(env_file=None, old_version=None, new_version=None):
     """
     Exécute les migrations nécessaires lors d'un changement de version.
@@ -885,6 +1029,20 @@ def run_migration(env_file=None, old_version=None, new_version=None):
                         all_applied_changes.append(change_desc)
                         if logger:
                             logger.info(f"  ✓ {change_desc}")
+
+                elif change_type == "run_script":
+                    # Exécuter un script de migration enregistré dans _MIGRATION_SCRIPTS
+                    script_name = change.get("script")
+                    script = _MIGRATION_SCRIPTS.get(script_name)
+
+                    if script is None:
+                        if logger:
+                            logger.error(f"  ✗ {change_desc}: script inconnu '{script_name}'")
+                    else:
+                        if script(base_path=base_path, logger=logger, **change.get("params", {})):
+                            all_applied_changes.append(change_desc)
+                            if logger:
+                                logger.info(f"  ✓ {change_desc}")
 
                 elif change_type == "no_change":
                     # Migration sans changement - juste pour marquer la version

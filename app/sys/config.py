@@ -1,7 +1,7 @@
 _ENV_CONFIG = {
     "plex_anime_downloader_V": {
         "env_var": "PLEX_ANIME_DOWNLOADER_V",
-        "default": "Beta-0.8.3",
+        "default": "Beta-0.8.4",
         "type": str,
         "use_default": True
     },
@@ -43,11 +43,19 @@ _Folder_Config = {
         "path": f";datapath;/database",
         "type": "normal",
         "file": {
-            "anime_data.json": {
-                "default_content": "anime_data.json"
+            "anime_data.db": {
+                "default_content": "none",
+                "file_script": "create_anime_data_db",
+                "file_script_params": {
+                    "db_file": ":anime_data.db:"
+                }
             },
-            "anime_details.json": {
-                "default_content": "anime_details.json"
+            "anime_details.db": {
+                "default_content": "none",
+                "file_script": "create_anime_details_db",
+                "file_script_params": {
+                    "db_file": ":anime_details.db:"
+                }
             },
             "planning_scan_data.json": {
                 "default_content": "none"
@@ -75,7 +83,7 @@ _Folder_Config = {
                 "file_script_params": {
                     "plexpath": ";plex_path;",
                     "plexpath_file": ":plex_path.json:",
-                    "database_path": ":anime_data.json:"
+                    "database_path": ":anime_data.db:"
                 }
             },
             "anime.json": {
@@ -96,14 +104,6 @@ _Folder_Config = {
 }
 
 _File_Config = {
-    "anime_data.json": {
-        "type": "json",
-        "default": {}
-    },
-    "anime_details.json": {
-        "type": "json",
-        "default": {}
-    },
     ".env": {
         "type": "env",
         "default": {
@@ -157,81 +157,27 @@ _File_Config = {
     }
 }
 
-
-def create_users_db(db_path):
+def _init_sqlite_database(db_file, db_class):
     """
-    Initialise la base de données users.db.
-    Vérifie si le fichier existe et s'il est valide, le crée ou le recrée si nécessaire.
-
-    Args:
-        db_path: Chemin complet vers le fichier users.db
-
-    Returns:
-        bool: True si l'initialisation a réussi, False sinon
+    Initialise une base SQLite (création du fichier et des tables si besoin).
+    La conversion des anciens fichiers JSON est gérée par migration.py (Beta-0.8.4).
     """
-    import sqlite3
-    import os
-    from app.sys.system import universal_logger
+    if not db_file:
+        return None
 
-    logger = universal_logger("UsersDB", "sys.log")
+    return db_class(database_path=str(db_file))
 
-    # Créer le dossier parent si nécessaire
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
-    # Récupérer la définition SQL depuis _File_Config
-    create_table_sql = _File_Config.get("users.db", {}).get("default",
-        "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL);")
+def create_anime_data_db(db_file=None):
+    """Script pour initialiser anime_data.db (et migrer anime_data.json si présent)."""
+    from app.sys.database import anime_data_database
+    _init_sqlite_database(db_file, anime_data_database)
 
-    # Ajouter "IF NOT EXISTS" si ce n'est pas déjà présent
-    if "IF NOT EXISTS" not in create_table_sql.upper():
-        create_table_sql = create_table_sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
 
-    # Vérifier si le fichier existe et s'il est une base de données SQLite valide
-    db_exists = os.path.exists(db_path)
-    db_valid = False
-    table_exists = False
-
-    if db_exists:
-        try:
-            # Tenter de se connecter et de vérifier que c'est une base SQLite valide
-            conn = sqlite3.connect(db_path)
-            # Vérifier que la table users existe
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-            table_exists = cursor.fetchone() is not None
-            conn.close()
-            db_valid = True
-        except (sqlite3.DatabaseError, sqlite3.OperationalError):
-            # Le fichier existe mais n'est pas une base de données valide
-            db_valid = False
-            try:
-                os.remove(db_path)
-                logger.warning("Fichier users.db corrompu, suppression et recréation")
-            except Exception as e:
-                logger.error(f"Impossible de supprimer le fichier users.db corrompu: {e}")
-                return False
-
-    # Créer la base de données et la table si nécessaire
-    if not db_exists or not db_valid or not table_exists:
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
-            with conn:
-                # Créer la table (IF NOT EXISTS garantit qu'elle ne sera pas recréée si elle existe)
-                conn.execute(create_table_sql)
-            conn.close()
-            if not db_exists:
-                logger.info("Base users.db créée avec la table users")
-            elif not table_exists:
-                logger.info("Table users créée dans users.db")
-            else:
-                logger.info("Base users.db recréée")
-            return True
-        except Exception as e:
-            logger.error(f"Erreur lors de la création de users.db: {e}")
-            return False
-
-    return True
+def create_anime_details_db(db_file=None):
+    """Script pour initialiser anime_details.db (et migrer anime_details.json si présent)."""
+    from app.sys.database import anime_details_database
+    _init_sqlite_database(db_file, anime_details_database)
 
 
 def create_plex_path(plexpath_file=None, plexpath=None, database_path=None):
@@ -386,5 +332,6 @@ def auto_env(env_file=None):
 _FILE_SCRIPTS = {
     "create_plex_path": create_plex_path,
     "auto_env": auto_env,
-    "create_users_db": create_users_db
+    "create_anime_data_db": create_anime_data_db,
+    "create_anime_details_db": create_anime_details_db
 }

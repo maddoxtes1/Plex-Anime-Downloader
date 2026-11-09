@@ -1,11 +1,14 @@
 import os
-import threading
 import json
+import sqlite3
+import threading
+from contextlib import contextmanager
 
 from .system import universal_logger
 
 _DATABASE_LOCKS = {}
 _DATABASE_LOCKS_GUARD = threading.Lock()
+
 
 def get_database_lock(path):
     path = os.path.abspath(path)
@@ -16,149 +19,193 @@ def get_database_lock(path):
 
         return _DATABASE_LOCKS[path]
 
+
+def _to_json(value):
+    """Convertit une valeur Python en texte JSON (pour les listes stockées dans une colonne)."""
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _from_json(text, default=None):
+    """Convertit un texte JSON en valeur Python."""
+    if text is None:
+        return default
+    try:
+        return json.loads(text)
+    except (TypeError, ValueError):
+        return default
+
+
 class BaseDatabase:
     """
-    Classe de base pour toutes les bases de données JSON.
-    Contient les méthodes communes de lecture et sauvegarde.
+    Classe de base pour toutes les bases de données SQLite.
+    Gère la connexion, les verrous et la création des tables.
     """
+    # À définir dans les sous-classes
+    _SCHEMA = ""        # Script SQL de création des tables
+
     def __init__(self, database_path, logger_name, allow_file_not_found=False):
         """
         Initialise la base de données.
 
         Args:
-            database_path (str): Chemin vers le fichier JSON de la base de données
+            database_path (str): Chemin vers le fichier SQLite (.db) de la base de données
             logger_name (str): Nom du logger
-            allow_file_not_found (bool): Si True, ne lève pas d'erreur si le fichier n'existe pas
+            allow_file_not_found (bool): Gardé pour compatibilité (SQLite crée le fichier tout seul)
         """
         if database_path is None:
             raise ValueError(f"Le chemin du fichier de base de données n'est pas défini pour {logger_name}")
+
+        if str(database_path).lower().endswith(".json"):
+            raise ValueError(f"'{database_path}' est un fichier JSON pour {logger_name}: utilise un fichier .db")
+
         self.database_path = database_path
         self._lock = get_database_lock(self.database_path)
         self.logger = universal_logger(logger_name, "sys.log")
         self.allow_file_not_found = allow_file_not_found
 
-    def _read_database(self):
-        """
-        Lit la base de données depuis le fichier JSON.
+        folder = os.path.dirname(os.path.abspath(self.database_path))
+        os.makedirs(folder, exist_ok=True)
 
-        Returns:
-            dict: Les données de la base de données, ou {} si le fichier n'existe pas (si autorisé)
+        with self._lock:
+            self._init_schema()
 
-        Note:
-            Le fichier utilisé est défini par self.database_path (initialisé dans __init__)
+    # ------------------------------------------------------------------
+    # Connexion / transactions
+    # ------------------------------------------------------------------
+    def _connect(self):
+        conn = sqlite3.connect(self.database_path, timeout=30)
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
+
+    @contextmanager
+    def _db(self):
         """
-        try:
-            with self._lock:
-                self.logger.debug(f"Lecture de la base de données depuis: {self.database_path}")
-                with open(self.database_path, 'r', encoding='utf-8') as json_file:
-                    data = json.load(json_file)
-                self.logger.debug(f"Base de données lue avec succès depuis: {self.database_path}")
-                return data
-        except FileNotFoundError:
-            if self.allow_file_not_found:
-                # Si le fichier n'existe pas et que c'est autorisé, retourner un dictionnaire vide
-                self.logger.debug(f"Fichier '{self.database_path}' non trouvé, retour d'un dictionnaire vide")
+        Ouvre une connexion dans une transaction.
+        Commit automatique à la fin, rollback si une erreur survient.
+        """
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    yield conn
+            except Exception as e:
+                self.logger.error(f"Erreur SQL sur '{self.database_path}': {e}")
                 raise
-            raise
-        except Exception as e:
-            self.logger.error(f"Erreur lors de la lecture de la base de données depuis '{self.database_path}': {e}")
-            raise
+            finally:
+                conn.close()
 
-    def save_database(self, data):
-        """
-        Sauvegarde la base de données dans le fichier JSON.
-
-        Args:
-            data: Les données à sauvegarder (dict)
-
-        Note:
-            Le fichier utilisé est défini par self.database_path (initialisé dans __init__)
-        """
+    def _init_schema(self):
+        conn = self._connect()
         try:
-            with self._lock:
-                self.logger.debug(f"[DB SAVE START] "f"Thread={threading.current_thread().name} "f"ID={threading.get_ident()} "f"Path={os.path.abspath(self.database_path)}")
-
-                self.logger.debug(f"Sauvegarde de la base de données dans: {self.database_path}")
-                with open(self.database_path, 'w', encoding='utf-8') as json_file:
-                    json.dump(data, json_file, indent=4, ensure_ascii=False)
-                self.logger.debug(f"Base de données sauvegardée avec succès dans: {self.database_path}")
-                self.logger.debug(f"[DB SAVE END] "f"Thread={threading.current_thread().name} " f"ID={threading.get_ident()}")
-        except Exception as e:
-            self.logger.error(f"Erreur lors de la sauvegarde de la base de données dans '{self.database_path}': {e}")
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.executescript(self._SCHEMA)
+            conn.commit()
+        finally:
+            conn.close()
 
 
 class anime_data_database(BaseDatabase):
     """
     Base de données pour stocker les données des animes (séries, saisons, épisodes).
     Gère la structure hiérarchique : path -> series -> season -> episodes
+
+    Tables SQL : paths -> series -> seasons -> episodes
+    (la suppression d'un parent supprime automatiquement ses enfants)
     """
     anime_data_path = None
 
-    def __init__(self, database_path=None):
-        global anime_data_path
-        if database_path is not None:
-            anime_data_path = database_path
-        if anime_data_path is None:
-            raise ValueError("Le chemin du fichier de base de données anime-data n'est pas défini")
-        super().__init__(anime_data_path, "AnimeDataDatabase", allow_file_not_found=False)
+    _SCHEMA = """
+    CREATE TABLE IF NOT EXISTS paths (
+        name TEXT PRIMARY KEY
+    );
 
-    def _verify_path(self, data, path_name):
+    CREATE TABLE IF NOT EXISTS series (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        path_name TEXT NOT NULL REFERENCES paths(name) ON DELETE CASCADE,
+        name      TEXT NOT NULL,
+        UNIQUE (path_name, name)
+    );
+
+    CREATE TABLE IF NOT EXISTS seasons (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        series_id INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+        name      TEXT NOT NULL,
+        UNIQUE (series_id, name)
+    );
+
+    CREATE TABLE IF NOT EXISTS episodes (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+        name      TEXT NOT NULL,
+        status    TEXT NOT NULL DEFAULT 'not_downloaded',
+        url       TEXT NOT NULL DEFAULT '[]',
+        UNIQUE (season_id, name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_episodes_season_status ON episodes (season_id, status);
+    """
+
+    def __init__(self, database_path=None):
+        if database_path is not None:
+            anime_data_database.anime_data_path = database_path
+        if anime_data_database.anime_data_path is None:
+            raise ValueError("Le chemin du fichier de base de données anime-data n'est pas défini")
+        super().__init__(anime_data_database.anime_data_path, "AnimeDataDatabase", allow_file_not_found=False)
+
+    # ------------------------------------------------------------------
+    # Vérifications (renvoient l'id trouvé, ou None / False)
+    # ------------------------------------------------------------------
+    def _verify_path(self, conn, path_name):
         """
         Vérifie si un chemin (path) existe dans la base de données.
-
-        Args:
-            data (dict): Les données de la base de données
-            path_name (str): Le nom du chemin à vérifier
 
         Returns:
             bool: True si le chemin existe, False sinon
         """
-        if path_name not in data:
+        row = conn.execute("SELECT 1 FROM paths WHERE name = ?", (path_name,)).fetchone()
+        if row is None:
             self.logger.error(f"Le chemin '{path_name}' n'existe pas dans la base de données")
             return False
         return True
 
-    def _verify_series(self, data, path_name, series_name):
+    def _verify_series(self, conn, path_name, series_name):
         """
-        Vérifie si une série existe dans un chemin donné.
-        Vérifie d'abord que le chemin existe, puis que la série existe dans ce chemin.
-
-        Args:
-            data (dict): Les données de la base de données
-            path_name (str): Le nom du chemin
-            series_name (str): Le nom de la série à vérifier
+        Vérifie qu'une série existe dans un chemin donné.
 
         Returns:
-            bool: True si la série existe dans le chemin, False sinon
+            int | None: L'id de la série, ou None si elle n'existe pas
         """
-        if not self._verify_path(data, path_name):
-            return False
-        if series_name not in data[path_name]:
+        if not self._verify_path(conn, path_name):
+            return None
+        row = conn.execute(
+            "SELECT id FROM series WHERE path_name = ? AND name = ?", (path_name, series_name)
+        ).fetchone()
+        if row is None:
             self.logger.error(f"La série '{series_name}' n'existe pas dans le chemin '{path_name}'")
-            return False
-        return True
+            return None
+        return row[0]
 
-    def _verify_season(self, data, path_name, series_name, season_name):
+    def _verify_season(self, conn, path_name, series_name, season_name):
         """
-        Vérifie si une saison existe dans une série donnée.
-        Vérifie d'abord que le chemin et la série existent, puis que la saison existe.
-
-        Args:
-            data (dict): Les données de la base de données
-            path_name (str): Le nom du chemin
-            series_name (str): Le nom de la série
-            season_name (str): Le nom de la saison à vérifier
+        Vérifie qu'une saison existe dans une série donnée.
 
         Returns:
-            bool: True si la saison existe dans la série, False sinon
+            int | None: L'id de la saison, ou None si elle n'existe pas
         """
-        if not self._verify_series(data, path_name, series_name):
-            return False
-        if season_name not in data[path_name][series_name]:
+        series_id = self._verify_series(conn, path_name, series_name)
+        if series_id is None:
+            return None
+        row = conn.execute(
+            "SELECT id FROM seasons WHERE series_id = ? AND name = ?", (series_id, season_name)
+        ).fetchone()
+        if row is None:
             self.logger.error(f"La saison '{season_name}' n'existe pas dans la série '{series_name}' dans le chemin '{path_name}'")
-            return False
-        return True
+            return None
+        return row[0]
 
+    # ------------------------------------------------------------------
+    # Chemins
+    # ------------------------------------------------------------------
     def get_existing_path(self):
         """
         Récupère la liste de tous les chemins (paths) existants dans la base de données.
@@ -166,160 +213,137 @@ class anime_data_database(BaseDatabase):
         Returns:
             list: Liste des noms de chemins
         """
-        data = self._read_database()
-        return list(data.keys())
+        with self._db() as conn:
+            rows = conn.execute("SELECT name FROM paths ORDER BY rowid").fetchall()
+        return [row[0] for row in rows]
 
     def add_path(self, path_name):
         """
         Ajoute un nouveau chemin (path) dans la base de données.
         Si le chemin existe déjà, ne fait rien.
-
-        Args:
-            path_name (str): Le nom du chemin à ajouter
         """
-        with self._lock:
-            data = self._read_database()
-            if path_name not in data:
-                data[path_name] = {}
-                self.save_database(data)
+        with self._db() as conn:
+            cursor = conn.execute("INSERT OR IGNORE INTO paths (name) VALUES (?)", (path_name,))
+            if cursor.rowcount:
                 self.logger.debug(f"Chemin '{path_name}' ajouté avec succès")
 
     def delete_path(self, path_name):
         """
-        Supprime un chemin (path) et tout son contenu (séries, saisons, épisodes) de la base de données.
-
-        Args:
-            path_name (str): Le nom du chemin à supprimer
+        Supprime un chemin (path) et tout son contenu (séries, saisons, épisodes).
         """
-        with self._lock:
-            data = self._read_database()
-            if path_name in data:
-                del data[path_name]
-                self.save_database(data)
+        with self._db() as conn:
+            cursor = conn.execute("DELETE FROM paths WHERE name = ?", (path_name,))
+            if cursor.rowcount:
                 self.logger.debug(f"Chemin '{path_name}' supprimé avec succès")
 
+    # ------------------------------------------------------------------
+    # Séries / saisons
+    # ------------------------------------------------------------------
     def add_series(self, path_name, series_name):
         """
         Ajoute une nouvelle série dans un chemin donné.
         Vérifie d'abord que le chemin existe. Si la série existe déjà, ne fait rien.
-
-        Args:
-            path_name (str): Le nom du chemin où ajouter la série
-            series_name (str): Le nom de la série à ajouter
         """
-        with self._lock:
-            data = self._read_database()
-            if self._verify_path(data, path_name):
-                if series_name not in data[path_name]:
-                    data[path_name][series_name] = {}
-                    self.save_database(data)
+        with self._db() as conn:
+            if self._verify_path(conn, path_name):
+                cursor = conn.execute(
+                    "INSERT OR IGNORE INTO series (path_name, name) VALUES (?, ?)", (path_name, series_name)
+                )
+                if cursor.rowcount:
                     self.logger.debug(f"Série '{series_name}' ajoutée avec succès dans le chemin '{path_name}'")
 
     def add_season(self, path_name, series_name, season_name):
         """
         Ajoute une nouvelle saison dans une série donnée.
         Vérifie d'abord que le chemin et la série existent. Si la saison existe déjà, ne fait rien.
-
-        Args:
-            path_name (str): Le nom du chemin
-            series_name (str): Le nom de la série
-            season_name (str): Le nom de la saison à ajouter
         """
-        with self._lock:
-            data = self._read_database()
-            if self._verify_series(data, path_name, series_name):
-                if season_name not in data[path_name][series_name]:
-                    data[path_name][series_name][season_name] = {}
-                    self.save_database(data)
+        with self._db() as conn:
+            series_id = self._verify_series(conn, path_name, series_name)
+            if series_id is not None:
+                cursor = conn.execute(
+                    "INSERT OR IGNORE INTO seasons (series_id, name) VALUES (?, ?)", (series_id, season_name)
+                )
+                if cursor.rowcount:
                     self.logger.debug(f"Saison '{season_name}' ajoutée avec succès dans la série '{series_name}' dans le chemin '{path_name}'")
 
+    # ------------------------------------------------------------------
+    # Épisodes
+    # ------------------------------------------------------------------
     def add_episode(self, path_name, series_name, season_name, episode_list):
         """
-        Ajoute un nouvel épisode dans une saison donnée.
-        Vérifie d'abord que le chemin, la série et la saison existent.
-        Si l'épisode existe déjà, ne fait rien.
+        Ajoute (ou modifie s'il existe déjà) un épisode dans une saison donnée.
 
         Args:
-            path_name (str): Le nom du chemin
-            series_name (str): Le nom de la série
-            season_name (str): Le nom de la saison
-            episode_list (tuple): Tuple contenant (episode_name, episode_status, episode_url)
+            episode_list (tuple): (episode_name, episode_status, episode_url)
                 - episode_name (str): Le nom de l'épisode
-                - episode_status (str): Le statut de l'épisode (ex: "not_downloaded", "downloaded")
+                - episode_status (str): Le statut (ex: "not_downloaded", "downloaded")
                 - episode_url (list): Liste des URLs de l'épisode pour chaque domaine
         """
-        with self._lock:
-            data = self._read_database()
-            if self._verify_season(data, path_name, series_name, season_name):
+        with self._db() as conn:
+            season_id = self._verify_season(conn, path_name, series_name, season_name)
+            if season_id is not None:
                 episode_name, episode_status, episode_url = episode_list
-                if episode_name not in data[path_name][series_name][season_name]:
-                    data[path_name][series_name][season_name][episode_name] = {
-                        "status": episode_status,
-                        "url": episode_url
-                    }
-                else:
-                    data[path_name][series_name][season_name][episode_name] = {
-                        "status": episode_status,
-                        "url": episode_url
-                    }
-                self.save_database(data)
+                conn.execute(
+                    """
+                    INSERT INTO episodes (season_id, name, status, url)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT (season_id, name)
+                    DO UPDATE SET status = excluded.status, url = excluded.url
+                    """,
+                    (season_id, episode_name, episode_status, _to_json(episode_url))
+                )
                 self.logger.debug(f"Episode '{episode_name}' ajouté/modifier avec succès dans la saison '{season_name}' dans la série '{series_name}' dans le chemin '{path_name}'")
 
     def get_episode(self, path_name, series_name, season_name):
         """
         Récupère tous les épisodes d'une saison donnée.
-        Vérifie d'abord que le chemin, la série et la saison existent.
-
-        Args:
-            path_name (str): Le nom du chemin
-            series_name (str): Le nom de la série
-            season_name (str): Le nom de la saison
 
         Returns:
             list: Liste de tuples (episode_name, episode_status, episode_url) pour chaque épisode
         """
-        data = self._read_database()
-        episodes = []
-        if self._verify_season(data, path_name, series_name, season_name):
-            for episode_name, episode_data in data[path_name][series_name][season_name].items():
-                episodes.append((episode_name, episode_data["status"], episode_data["url"]))
-
-        return episodes
+        with self._db() as conn:
+            season_id = self._verify_season(conn, path_name, series_name, season_name)
+            if season_id is None:
+                return []
+            rows = conn.execute(
+                "SELECT name, status, url FROM episodes WHERE season_id = ? ORDER BY id", (season_id,)
+            ).fetchall()
+        return [(name, status, _from_json(url, [])) for name, status, url in rows]
 
     def update_episode_status(self, path_name, series_name, season_name, episode_name, episode_status):
-        with self._lock:
-            data = self._read_database()
-            if self._verify_season(data, path_name, series_name, season_name):
-                if episode_name not in data[path_name][series_name][season_name]:
-                    self.logger.debug(f"Episode {episode_name} existe pas")
-                    return
-
-                episode_data = data[path_name][series_name][season_name][episode_name]
-                data[path_name][series_name][season_name][episode_name] = {
-                    "status": episode_status,
-                    "url": episode_data.get("url", "")
-                }
-                self.save_database(data)
-                self.logger.debug(f"le status a ete update pour cette episode {episode_status}")
+        with self._db() as conn:
+            season_id = self._verify_season(conn, path_name, series_name, season_name)
+            if season_id is None:
+                return
+            cursor = conn.execute(
+                "UPDATE episodes SET status = ? WHERE season_id = ? AND name = ?",
+                (episode_status, season_id, episode_name)
+            )
+            if cursor.rowcount == 0:
+                self.logger.debug(f"Episode {episode_name} existe pas")
+                return
+            self.logger.debug(f"le status a ete update pour cette episode {episode_name} status: {episode_status}")
 
     def get_unistalled_episode(self, path_list):
         """
         Récupère tous les épisodes non téléchargés (status = "not_downloaded") d'une saison.
 
         Args:
-            path_list (tuple): Tuple contenant (path_name, series_name, season_name)
+            path_list (tuple): (path_name, series_name, season_name)
 
         Returns:
             list: Liste de tuples (episode_name, episode_url) pour les épisodes non téléchargés
         """
         path_name, series_name, season_name = path_list
-        data = self._read_database()
-        episodes = []
-        if self._verify_season(data, path_name, series_name, season_name):
-            for episode_name, episode_data in data[path_name][series_name][season_name].items():
-                if episode_data["status"] == "not_downloaded":
-                    episodes.append((episode_name, episode_data["url"]))
-        return episodes
+        with self._db() as conn:
+            season_id = self._verify_season(conn, path_name, series_name, season_name)
+            if season_id is None:
+                return []
+            rows = conn.execute(
+                "SELECT name, url FROM episodes WHERE season_id = ? AND status = 'not_downloaded' ORDER BY id",
+                (season_id,)
+            ).fetchall()
+        return [(name, _from_json(url, [])) for name, url in rows]
 
 
 class anime_details_database(BaseDatabase):
@@ -327,28 +351,101 @@ class anime_details_database(BaseDatabase):
     Base de données pour stocker les détails des animes (titre, image, description, genres, saisons).
     Permet de mettre en cache les informations extraites depuis anime-sama pour éviter les requêtes HTTP répétées.
 
-    Structure des données stockées:
+    Structure des données retournées (identique à avant):
         {
-            "anime_name": {
-                "title": str,
-                "image": str,
-                "description": str,
-                "genres": list[str],
-                "seasons": list[str],
-                "seasons_count": int
-            }
+            "title": str,
+            "image": str,
+            "description": str,
+            "genres": list[str],
+            "seasons": list[str],
+            "seasons_count": int
         }
+    Les clés supplémentaires éventuelles sont conservées dans la colonne 'extra'.
     """
     _anime_details_path = None
 
-    def __init__(self, database_path=None):
-        global _anime_details_path
-        if database_path is not None:
-            _anime_details_path = database_path
-        if _anime_details_path is None:
-            raise ValueError("Le chemin du fichier de base de données anime-details n'est pas défini")
-        super().__init__(_anime_details_path, "AnimeDetailsDatabase", allow_file_not_found=True)
+    _SCHEMA = """
+    CREATE TABLE IF NOT EXISTS anime_details (
+        name          TEXT PRIMARY KEY,
+        title         TEXT,
+        image         TEXT,
+        description   TEXT,
+        genres        TEXT,
+        seasons       TEXT,
+        seasons_count INTEGER,
+        extra         TEXT NOT NULL DEFAULT '{}'
+    );
+    """
 
+    _TEXT_FIELDS = ("title", "image", "description")
+    _JSON_FIELDS = ("genres", "seasons")
+    _KNOWN_FIELDS = _TEXT_FIELDS + _JSON_FIELDS + ("seasons_count",)
+
+    def __init__(self, database_path=None):
+        if database_path is not None:
+            anime_details_database._anime_details_path = database_path
+        if anime_details_database._anime_details_path is None:
+            raise ValueError("Le chemin du fichier de base de données anime-details n'est pas défini")
+        super().__init__(anime_details_database._anime_details_path, "AnimeDetailsDatabase", allow_file_not_found=True)
+
+    # ------------------------------------------------------------------
+    # Conversion dict <-> ligne SQL
+    # ------------------------------------------------------------------
+    def _upsert(self, conn, anime_name, details):
+        extra = {k: v for k, v in details.items() if k not in self._KNOWN_FIELDS}
+        conn.execute(
+            """
+            INSERT INTO anime_details (name, title, image, description, genres, seasons, seasons_count, extra)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (name) DO UPDATE SET
+                title = excluded.title,
+                image = excluded.image,
+                description = excluded.description,
+                genres = excluded.genres,
+                seasons = excluded.seasons,
+                seasons_count = excluded.seasons_count,
+                extra = excluded.extra
+            """,
+            (
+                anime_name,
+                details.get("title"),
+                details.get("image"),
+                details.get("description"),
+                _to_json(details["genres"]) if "genres" in details else None,
+                _to_json(details["seasons"]) if "seasons" in details else None,
+                details.get("seasons_count"),
+                _to_json(extra),
+            )
+        )
+
+    def _fetch(self, conn, anime_name):
+        row = conn.execute(
+            "SELECT title, image, description, genres, seasons, seasons_count, extra FROM anime_details WHERE name = ?",
+            (anime_name,)
+        ).fetchone()
+        if row is None:
+            return None
+
+        title, image, description, genres, seasons, seasons_count, extra = row
+        details = {}
+        if title is not None:
+            details["title"] = title
+        if image is not None:
+            details["image"] = image
+        if description is not None:
+            details["description"] = description
+        if genres is not None:
+            details["genres"] = _from_json(genres, [])
+        if seasons is not None:
+            details["seasons"] = _from_json(seasons, [])
+        if seasons_count is not None:
+            details["seasons_count"] = seasons_count
+        details.update(_from_json(extra, {}))
+        return details
+
+    # ------------------------------------------------------------------
+    # API publique
+    # ------------------------------------------------------------------
     def get_anime_details(self, anime_name):
         """
         Récupère les détails d'un anime depuis la base de données.
@@ -360,43 +457,42 @@ class anime_details_database(BaseDatabase):
             dict: Dictionnaire avec 'title', 'image', 'description', 'genres', 'seasons', 'seasons_count',
                   ou None si l'anime n'est pas dans la base de données
         """
-        data = self._read_database()
-        if anime_name in data:
+        with self._db() as conn:
+            details = self._fetch(conn, anime_name)
+        if details is not None:
             self.logger.debug(f"Détails de '{anime_name}' trouvés dans le cache")
-            return data[anime_name]
-        return None
+        return details
 
     def save_anime_details(self, anime_name, details):
         """
-        Sauvegarde les détails d'un anime dans la base de données.
+        Sauvegarde (ou remplace) les détails d'un anime dans la base de données.
 
         Args:
             anime_name (str): Nom de l'anime
             details (dict): Dictionnaire contenant 'title', 'image', 'description', 'genres', 'seasons', 'seasons_count'
         """
-        with self._lock:
-            data = self._read_database()
-            data[anime_name] = details
-            self.save_database(data)
-            self.logger.debug(f"Détails de '{anime_name}' sauvegardés dans le cache")
+        with self._db() as conn:
+            self._upsert(conn, anime_name, details)
+        self.logger.debug(f"Détails de '{anime_name}' sauvegardés dans le cache")
 
     def update_anime_details(self, anime_name, details):
         """
         Met à jour les détails d'un anime existant dans la base de données.
+        S'il n'existe pas encore, il est créé.
 
         Args:
             anime_name (str): Nom de l'anime
             details (dict): Dictionnaire contenant les nouvelles informations
         """
-        with self._lock:
-            data = self._read_database()
-            if anime_name in data:
-                data[anime_name].update(details)
-                self.save_database(data)
-                self.logger.debug(f"Détails de '{anime_name}' mis à jour dans le cache")
-            else:
+        with self._db() as conn:
+            existing = self._fetch(conn, anime_name)
+            if existing is None:
                 self.logger.warning(f"Tentative de mise à jour de '{anime_name}' qui n'existe pas. Utilisation de save_anime_details.")
-                self.save_anime_details(anime_name, details)
+                self._upsert(conn, anime_name, details)
+            else:
+                existing.update(details)
+                self._upsert(conn, anime_name, existing)
+                self.logger.debug(f"Détails de '{anime_name}' mis à jour dans le cache")
 
     def delete_anime_details(self, anime_name):
         """
@@ -405,14 +501,12 @@ class anime_details_database(BaseDatabase):
         Args:
             anime_name (str): Nom de l'anime à supprimer
         """
-        with self._lock:
-            data = self._read_database()
-            if anime_name in data:
-                del data[anime_name]
-                self.save_database(data)
-                self.logger.debug(f"Détails de '{anime_name}' supprimés du cache")
-            else:
-                self.logger.warning(f"Tentative de suppression de '{anime_name}' qui n'existe pas dans le cache")
+        with self._db() as conn:
+            cursor = conn.execute("DELETE FROM anime_details WHERE name = ?", (anime_name,))
+        if cursor.rowcount:
+            self.logger.debug(f"Détails de '{anime_name}' supprimés du cache")
+        else:
+            self.logger.warning(f"Tentative de suppression de '{anime_name}' qui n'existe pas dans le cache")
 
     def get_all_anime_names(self):
         """
@@ -421,12 +515,12 @@ class anime_details_database(BaseDatabase):
         Returns:
             list: Liste des noms d'anime
         """
-        data = self._read_database()
-        return list(data.keys())
+        with self._db() as conn:
+            rows = conn.execute("SELECT name FROM anime_details ORDER BY rowid").fetchall()
+        return [row[0] for row in rows]
 
     def clear_cache(self):
         """Vide complètement le cache des détails d'anime"""
-        with self._lock:
-            data = {}
-            self.save_database(data)
-            self.logger.info("Cache des détails d'anime vidé")
+        with self._db() as conn:
+            conn.execute("DELETE FROM anime_details")
+        self.logger.info("Cache des détails d'anime vidé")
