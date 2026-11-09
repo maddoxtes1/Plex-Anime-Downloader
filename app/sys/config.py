@@ -280,6 +280,8 @@ def create_plex_path(plexpath_file=None, plexpath=None, database_path=None):
     try:
         if plex_path and os.path.exists(plex_path) and os.path.isdir(plex_path):
             for item in os.listdir(plex_path):
+                if item.startswith('.'):
+                    continue
                 full_path = os.path.join(plex_path, item)
                 if os.path.isdir(full_path) and item not in existing_paths:
                     updated_paths.append({"path": item, "language": ["disable"]})
