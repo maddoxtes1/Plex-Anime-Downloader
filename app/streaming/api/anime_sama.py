@@ -29,7 +29,7 @@ def get_panning():
         config = ConfigParser(allow_no_value=True)
         config.read(config_path, encoding='utf-8')
         as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
-        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
+        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="True")
         flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
         flaresolver_port = config.get("flaresolver", "port", fallback="8191")
         # Construire l'URL du planning
@@ -219,7 +219,7 @@ def get_anime_details(name):
         config = ConfigParser(allow_no_value=True)
         config.read(config_path, encoding='utf-8')
         as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
-        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
+        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="True")
         flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
         flaresolver_port = config.get("flaresolver", "port", fallback="8191")
 
@@ -504,7 +504,7 @@ def get_episode_js(anime_name, anime_url, episode_js):
         config_path = FolderConfig.find_path(file_name="config.conf")
         config = ConfigParser(allow_no_value=True)
         config.read(config_path, encoding='utf-8')
-        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
+        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="True")
         flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
         flaresolver_port = config.get("flaresolver", "port", fallback="8191")
 
@@ -602,7 +602,7 @@ def get_anime_season(anime_name, anime_season_number):
     config = ConfigParser(allow_no_value=True)
     config.read(config_path, encoding='utf-8')
     as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
-    flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
+    flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="True")
     flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
     flaresolver_port = config.get("flaresolver", "port", fallback="8191")
 
@@ -665,7 +665,7 @@ def get_anime_season(anime_name, anime_season_number):
 
         # Recherche de l'élément correspondant à la saison demandée
         season_key = f"saison{anime_season_number}"
-        
+
         # Chercher les éléments avec des attributs href contenant la saison
         for link in soup.find_all('a', href=True):
             href = link.get('href')
@@ -676,7 +676,7 @@ def get_anime_season(anime_name, anime_season_number):
                     lang = parts[-1]  # Le dernier élément est le language
                     logger.debug(f"Trouvé le language pour la saison {anime_season_number}: {lang}")
                     return lang
-        
+
         # Si on n'a pas trouvé avec la saison, chercher tous les liens vostfr
         for link in soup.find_all('a', href=True):
             href = link.get('href')
@@ -686,7 +686,7 @@ def get_anime_season(anime_name, anime_season_number):
                     lang = parts[-1]
                     logger.debug(f"Trouvé le language par défaut vostfr: {lang}")
                     return lang
-        
+
         logger.warning(f"Aucun language trouvé pour la saison {anime_season_number} ou vostfr par défaut")
         return None
 
@@ -829,7 +829,7 @@ def search_anime(value):
     config = ConfigParser(allow_no_value=True)
     config.read(config_path, encoding='utf-8')
     as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
-    flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true")
+    flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="True")
     flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
     flaresolver_port = config.get("flaresolver", "port", fallback="8191")
 
