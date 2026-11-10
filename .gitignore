@@ -7,7 +7,6 @@ dockerfile.temps
 pull_command
 AFAIRE.txt
 franime.log
-franime.py
 franime_api.py
 patchnote
 __pycache__/
