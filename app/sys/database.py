@@ -97,7 +97,11 @@ class BaseDatabase:
     def _init_schema(self):
         conn = self._connect()
         try:
-            conn.execute("PRAGMA journal_mode = WAL")
+            try:
+                conn.execute("PRAGMA journal_mode = WAL")
+            except sqlite3.OperationalError as e:
+                self.logger.warning(f"WAL non supporté sur ce volume ({e}), mode DELETE utilisé")
+                conn.execute("PRAGMA journal_mode = DELETE")
             conn.executescript(self._SCHEMA)
             conn.commit()
         finally:

@@ -9,6 +9,7 @@ from configparser import ConfigParser
 
 from ...sys import universal_logger, FolderConfig
 from ...sys.database import anime_data_database, anime_details_database
+from ...sys.db_access import get_details_db
 
 def get_panning():
     """
@@ -29,7 +30,7 @@ def get_panning():
         config = ConfigParser(allow_no_value=True)
         config.read(config_path, encoding='utf-8')
         as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
-        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="True")
+        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true").strip().lower()
         flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
         flaresolver_port = config.get("flaresolver", "port", fallback="8191")
         # Construire l'URL du planning
@@ -189,26 +190,20 @@ def get_anime_details(name):
     anime_name = name
     # Vérifier d'abord dans le cache
     try:
-        # Récupérer le chemin de la base de données anime_details.json
-        from ...sys import FolderConfig
-        anime_details_path = FolderConfig.find_path(file_name="anime_details.json")
-        if anime_details_path:
-            details_db = anime_details_database(database_path=str(anime_details_path))
-            cached_details = details_db.get_anime_details(anime_name)
-            # Re-fetcher si cache incomplet (image / description / genres manquants)
-            if cached_details is not None:
-                has_image = bool(cached_details.get('image'))
-                has_description = bool(cached_details.get('description')) and cached_details.get('description') != 'Description non disponible'
-                has_genres = bool(cached_details.get('genres'))
-                if has_image and has_description and has_genres:
-                    logger.debug(f"Détails de '{anime_name}' récupérés depuis le cache (pas de requête HTTP)")
-                    return cached_details
-                logger.debug(
-                    f"Cache incomplet pour '{anime_name}' "
-                    f"(image={has_image}, description={has_description}, genres={has_genres}) — re-fetch"
-                )
-        else:
-            logger.debug(f"Chemin anime_details.json non trouvé, pas de cache disponible")
+        details_db = get_details_db()
+        cached_details = details_db.get_anime_details(anime_name)
+        # Re-fetcher si cache incomplet (image / description / genres manquants)
+        if cached_details is not None:
+            has_image = bool(cached_details.get('image'))
+            has_description = bool(cached_details.get('description')) and cached_details.get('description') != 'Description non disponible'
+            has_genres = bool(cached_details.get('genres'))
+            if has_image and has_description and has_genres:
+                logger.debug(f"Détails de '{anime_name}' récupérés depuis le cache (pas de requête HTTP)")
+                return cached_details
+            logger.debug(
+                f"Cache incomplet pour '{anime_name}' "
+                f"(image={has_image}, description={has_description}, genres={has_genres}) — re-fetch"
+            )
     except Exception as e:
         logger.warning(f"Erreur lors de la lecture du cache pour '{anime_name}': {e}. Continuation avec requête HTTP.")
 
@@ -219,7 +214,7 @@ def get_anime_details(name):
         config = ConfigParser(allow_no_value=True)
         config.read(config_path, encoding='utf-8')
         as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
-        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="True")
+        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true").strip().lower()
         flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
         flaresolver_port = config.get("flaresolver", "port", fallback="8191")
 
@@ -444,14 +439,8 @@ def get_anime_details(name):
 
         # Sauvegarder dans le cache pour les prochaines fois
         try:
-            # Récupérer le chemin de la base de données anime_details.json
-            anime_details_path = FolderConfig.find_path(file_name="anime_details.json")
-            if anime_details_path:
-                details_db = anime_details_database(database_path=str(anime_details_path))
-                details_db.save_anime_details(anime_name, result)
-                logger.debug(f"Détails de '{anime_name}' sauvegardés dans le cache")
-            else:
-                logger.debug(f"Chemin anime_details.json non trouvé, pas de sauvegarde en cache")
+            details_db = get_details_db()
+            details_db.save_anime_details(anime_name, result)
         except Exception as e:
             logger.warning(f"Erreur lors de la sauvegarde du cache pour '{anime_name}': {e}. Les détails sont quand même retournés.")
 
@@ -504,7 +493,7 @@ def get_episode_js(anime_name, anime_url, episode_js):
         config_path = FolderConfig.find_path(file_name="config.conf")
         config = ConfigParser(allow_no_value=True)
         config.read(config_path, encoding='utf-8')
-        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="True")
+        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true").strip().lower()
         flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
         flaresolver_port = config.get("flaresolver", "port", fallback="8191")
 
@@ -602,7 +591,7 @@ def get_anime_season(anime_name, anime_season_number):
     config = ConfigParser(allow_no_value=True)
     config.read(config_path, encoding='utf-8')
     as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
-    flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="True")
+    flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true").strip().lower()
     flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
     flaresolver_port = config.get("flaresolver", "port", fallback="8191")
 
@@ -829,7 +818,7 @@ def search_anime(value):
     config = ConfigParser(allow_no_value=True)
     config.read(config_path, encoding='utf-8')
     as_baseurl = config.get("anime_sama", "base_url", fallback="https://anime-sama.tv")
-    flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="True")
+    flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true").strip().lower()
     flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
     flaresolver_port = config.get("flaresolver", "port", fallback="8191")
 
