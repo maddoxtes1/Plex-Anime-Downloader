@@ -68,7 +68,7 @@ def get_panning():
         if raw_html_content is None and flaresolver_use == "true":
             logger.debug("Tentative de récupération via Flaresolver.")
             try:
-                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/", headers=headers_flaresolver, json=data_cloudflare)
+                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/v1", headers=headers_flaresolver, json=data_cloudflare, timeout=130)
                 response_flaresolver.raise_for_status()
                 flaresolver_json_response = response_flaresolver.json()
                 if 'solution' in flaresolver_json_response and 'response' in flaresolver_json_response['solution']:
@@ -253,7 +253,7 @@ def get_anime_details(name):
         if raw_html_content is None and flaresolver_use == "true":
             logger.debug("Tentative de récupération via Flaresolver.")
             try:
-                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/", headers=headers_flaresolver, json=data_cloudflare)
+                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/v1", headers=headers_flaresolver, json=data_cloudflare, timeout=130)
                 response_flaresolver.raise_for_status()
                 flaresolver_json_response = response_flaresolver.json()
                 if 'solution' in flaresolver_json_response and 'response' in flaresolver_json_response['solution']:
@@ -507,17 +507,20 @@ def get_episode_js(anime_name, anime_url, episode_js):
             "maxTimeout": 120000,
             "returnOnlyCookies": False
         }
+        header_url = anime_url.removesuffix("episodes.js")
+        logger.debug(f"header url {header_url}")
         headers_flaresolver = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Referer": header_url
         }
 
         raw_content = None
 
         # Tentative de requête directe
         try:
-            response = requests.get(anime_url, stream=True, timeout=30)
+            response = requests.get(anime_url, stream=True, headers=headers_flaresolver, timeout=30)
             if response.status_code == 403:
                 logger.warning("Requête directe bloquée par Cloudflare (403). Tentative avec Flaresolver si activé.")
             else:
@@ -531,7 +534,7 @@ def get_episode_js(anime_name, anime_url, episode_js):
         if raw_content is None and flaresolver_use == "true":
             logger.debug("Tentative de récupération via Flaresolver.")
             try:
-                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/", headers=headers_flaresolver, json=data_cloudflare)
+                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/v1", headers=headers_flaresolver, json=data_cloudflare, timeout=130)
                 response_flaresolver.raise_for_status()
                 flaresolver_json_response = response_flaresolver.json()
                 if 'solution' in flaresolver_json_response and 'response' in flaresolver_json_response['solution']:
@@ -630,7 +633,7 @@ def get_anime_season(anime_name, anime_season_number):
         if raw_html_content is None and flaresolver_use == "true":
             logger.debug("Tentative de récupération via Flaresolver.")
             try:
-                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/", headers=headers_flaresolver, json=data_cloudflare)
+                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/v1", headers=headers_flaresolver, json=data_cloudflare, timeout=130)
                 response_flaresolver.raise_for_status()
                 flaresolver_json_response = response_flaresolver.json()
                 if 'solution' in flaresolver_json_response and 'response' in flaresolver_json_response['solution']:
@@ -745,7 +748,7 @@ def get_anime_season(anime_name, anime_season_number):
             if raw_html_content is None and flaresolver_use == "true":
                 logger.debug("Tentative de récupération via Flaresolver.")
                 try:
-                    response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/", headers=headers_flaresolver, json=data_cloudflare)
+                    response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/v1", headers=headers_flaresolver, json=data_cloudflare, timeout=130)
                     response_flaresolver.raise_for_status()
                     flaresolver_json_response = response_flaresolver.json()
                     if 'solution' in flaresolver_json_response and 'response' in flaresolver_json_response['solution']:
@@ -859,7 +862,7 @@ def search_anime(value):
         if raw_html_content is None and flaresolver_use == "true":
             logger.debug("Tentative de récupération via Flaresolver.")
             try:
-                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/", headers=headers_flaresolver, json=data_cloudflare)
+                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/v1", headers=headers_flaresolver, json=data_cloudflare, timeout=130)
                 response_flaresolver.raise_for_status()
                 flaresolver_json_response = response_flaresolver.json()
                 if 'solution' in flaresolver_json_response and 'response' in flaresolver_json_response['solution']:
