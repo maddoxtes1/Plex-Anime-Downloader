@@ -288,7 +288,7 @@ class anime_data_database(BaseDatabase):
                     INSERT INTO episodes (season_id, name, status, url)
                     VALUES (?, ?, ?, ?)
                     ON CONFLICT (season_id, name)
-                    DO UPDATE SET status = excluded.status, url = excluded.url
+                    DO UPDATE SET url = excluded.url
                     """,
                     (season_id, episode_name, episode_status, _to_json(episode_url))
                 )
@@ -314,35 +314,53 @@ class anime_data_database(BaseDatabase):
         with self._db() as conn:
             season_id = self._verify_season(conn, path_name, series_name, season_name)
             if season_id is None:
-                return
+                self.logger.debug(f"Saison introuvable: {path_name}/{series_name}/{season_name}")
+                return False
+
             cursor = conn.execute(
                 "UPDATE episodes SET status = ? WHERE season_id = ? AND name = ?",
-                (episode_status, season_id, episode_name)
+                (str(episode_status), season_id, episode_name)
             )
             if cursor.rowcount == 0:
-                self.logger.debug(f"Episode {episode_name} existe pas")
-                return
-            self.logger.debug(f"le status a ete update pour cette episode {episode_name} status: {episode_status}")
+                noms = [r[0] for r in conn.execute(
+                    "SELECT name FROM episodes WHERE season_id = ?", (season_id,)
+                ).fetchall()]
+                self.logger.debug(f"Episode {episode_name!r} introuvable. Noms en base: {noms}")
+                return False
+
+            conn.commit()  # <-- important si _db() ne commit pas
+            self.logger.debug(f"Status update: {episode_name!r} -> {episode_status!r}")
+            return True
 
     def get_unistalled_episode(self, path_list):
-        """
-        Récupère tous les épisodes non téléchargés (status = "not_downloaded") d'une saison.
-
-        Args:
-            path_list (tuple): (path_name, series_name, season_name)
-
-        Returns:
-            list: Liste de tuples (episode_name, episode_url) pour les épisodes non téléchargés
-        """
         path_name, series_name, season_name = path_list
         with self._db() as conn:
             season_id = self._verify_season(conn, path_name, series_name, season_name)
             if season_id is None:
+                self.logger.debug(f"Saison introuvable: {path_list}")
                 return []
+
+            # --- DEBUG : voir tous les statuts de la saison ---
+            all_rows = conn.execute(
+                "SELECT id, name, status FROM episodes WHERE season_id = ? ORDER BY id",
+                (season_id,)
+            ).fetchall()
+            for ep_id, name, status in all_rows:
+                self.logger.debug(f"[season {season_id}] id#{ep_id} '{name}' -> status={status!r}")
+
+            counts = conn.execute(
+                "SELECT status, COUNT(*) FROM episodes WHERE season_id = ? GROUP BY status",
+                (season_id,)
+            ).fetchall()
+            self.logger.debug(f"[season {season_id}] répartition des statuts: {dict(counts)}")
+            # --- FIN DEBUG ---
+
             rows = conn.execute(
                 "SELECT name, url FROM episodes WHERE season_id = ? AND status = 'not_downloaded' ORDER BY id",
                 (season_id,)
             ).fetchall()
+
+        self.logger.debug(f"{len(rows)} épisode(s) not_downloaded trouvé(s): {[name for name, _ in rows]}")
         return [(name, _from_json(url, [])) for name, url in rows]
 
 
