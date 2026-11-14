@@ -954,8 +954,14 @@ class get_anime_episodes_url:
     API_URL = "https://anime-sama.to/api/lien.php"
 
     # Pauses "réalistes" (en secondes, tirées au hasard dans l'intervalle)
-    REQUEST_DELAY = (1.0, 2)  # entre chaque appel à lien.php (dans un même anime)
-    ANIME_DELAY = (3.0, 5.0)    # entre chaque anime
+    REQUEST_DELAY = (1.0, 1.5)  # entre chaque appel à lien.php (dans un même anime)
+    ANIME_DELAY = (2.0, 4.0)    # entre chaque anime
+
+    # Limite de requêtes (HTTP 429 ou {"erreur":"trop"})
+    RATE_LIMIT_COOLDOWN = (20.0, 30.0)  # pause avant l'unique nouvel essai (si pas de Retry-After)
+    MAX_COOLDOWN = 120                  # plafond si le serveur demande une très longue pause
+    MAX_DELAY_MULTIPLIER = 8            # ralentissement maximum des pauses normales
+    _delay_multiplier = 1.0             # partagé entre animes : double à chaque limite, redescend ensuite
 
     def __init__(self, path_list, episode_js_or_list):
         self.logger = universal_logger(name="Anime-sama", log_file="anime-sama.log")
@@ -1075,41 +1081,82 @@ class get_anime_episodes_url:
             return str(data["erreur"])
         return None
 
+    def _api_request(self, url, referer):
+        """GET direct sur lien.php. Retourne (status, body, retry_after) ; status None si erreur réseau."""
+        headers = {"User-Agent": BROWSER_UA, "Referer": referer, "Accept": "*/*"}
+        try:
+            r = requests.get(url, headers=headers, timeout=30)
+            return r.status_code, r.text, r.headers.get("Retry-After")
+        except requests.exceptions.RequestException as e:
+            self.logger.warning(f"Requête lien.php échouée ({e})")
+            return None, None, None
+
+    def _cooldown_seconds(self, retry_after):
+        """Utilise Retry-After s'il est fourni, sinon une pause aléatoire."""
+        try:
+            if retry_after is not None:
+                return min(float(retry_after), self.MAX_COOLDOWN)
+        except ValueError:
+            pass
+        return random.uniform(*self.RATE_LIMIT_COOLDOWN)
+
+    def _slow_down(self):
+        """Double les pauses normales (jusqu'à un plafond) pour les liens suivants."""
+        cls = type(self)
+        cls._delay_multiplier = min(cls._delay_multiplier * 2, self.MAX_DELAY_MULTIPLIER)
+        self._rate_limited = True
+        self.logger.info(f"Ralentissement : pauses x{cls._delay_multiplier:g}")
+
     def resolve_link(self, jeton, link_id, referer):
         url = f"{self.API_URL}?j={jeton}&l={link_id}"
 
-        body = http_get_text(url, referer=referer, logger=self.logger, fs_conf=self.fs_conf, is_html=False)
-        if not body:
-            return "none"
-
-        error = self._api_error(body)
-        if error:
-            # Une seule seconde chance : on réessaie via Flaresolver, puis on abandonne
-            self.logger.warning(f"API a répondu '{error}' pour l'id {link_id}, tentative via Flaresolver.")
-            if not self.fs_conf["use"]:
-                return "none"
-            body = http_get_text(
-                url, referer=referer, logger=self.logger, fs_conf=self.fs_conf,
-                is_html=False, force_flaresolver=True,
-            )
-            if not body or self._api_error(body):
-                self.logger.error(f"Échec pour l'id {link_id}, on continue.")
+        for attempt in (1, 2):  # 1 essai + 1 seul nouvel essai après une pause
+            status, body, retry_after = self._api_request(url, referer)
+            if status is None:
                 return "none"
 
-        if not self._logged_api_sample:  # utile pour ajuster le parsing si besoin
-            self.logger.debug(f"Exemple de réponse API : {body[:200]}")
-            self._logged_api_sample = True
+            error = self._api_error(body) if body else None
 
-        resolved = self._extract_url(body)
-        if not resolved:
-            self.logger.warning(f"Réponse API inattendue pour l'id {link_id} : {body[:100]}")
-            return "none"
-        return resolved
+            # Limite de requêtes : pause puis un seul nouvel essai
+            if status == 429 or error == "trop":
+                self._slow_down()
+                if attempt == 1:
+                    wait = self._cooldown_seconds(retry_after)
+                    self.logger.warning(
+                        f"Limite de requêtes (id {link_id}), pause de {wait:.0f}s puis un seul nouvel essai"
+                    )
+                    time.sleep(wait)
+                    continue
+                self.logger.error(f"Toujours limité pour l'id {link_id}, on continue.")
+                return "none"
+
+            if status >= 400:
+                self.logger.error(f"lien.php a répondu HTTP {status} pour l'id {link_id}, on continue.")
+                return "none"
+
+            # Autre erreur de l'API (ex: "origine") : un nouvel essai ne changerait rien
+            if error:
+                self.logger.error(f"API a répondu '{error}' pour l'id {link_id}, on continue.")
+                return "none"
+
+            if not self._logged_api_sample:  # utile pour ajuster le parsing si besoin
+                self.logger.debug(f"Exemple de réponse API : {body[:200]}")
+                self._logged_api_sample = True
+
+            resolved = self._extract_url(body)
+            if not resolved:
+                self.logger.warning(f"Réponse API inattendue pour l'id {link_id} : {body[:100]}")
+                return "none"
+            return resolved
+
+        return "none"
 
     # --- Traitement --------------------------------------------------------
     def process_files(self, episode_js_list):
-        all_episodes = []  # liste de {domaine: url}, numérotation continue entre fichiers
+        all_episodes = []  # liste de {domaine: url} (ou None si à retenter), numérotation continue
         made_requests = False
+        skipped = 0
+        self._rate_limited = False
 
         for episode_js in episode_js_list:
             parsed = self.parse_script(episode_js)
@@ -1128,19 +1175,36 @@ class get_anime_episodes_url:
                 for domain, link_id in ep.items():
                     resolved[domain] = self.resolve_link(jeton, link_id, referer)
                     made_requests = True
-                    delay = random.uniform(*self.REQUEST_DELAY)
+                    delay = random.uniform(*self.REQUEST_DELAY) * type(self)._delay_multiplier
                     self.logger.debug(f"Pause de {delay:.1f}s avant le prochain lien")
                     time.sleep(delay)  # pause entre chaque lien
-                all_episodes.append(resolved)
 
-        if all_episodes:
+                if ep and all(url == "none" for url in resolved.values()):
+                    # Des liens existaient mais tous ont échoué : on n'enregistre pas
+                    # un épisode vide, il sera retenté au prochain scan.
+                    skipped += 1
+                    all_episodes.append(None)
+                else:
+                    all_episodes.append(resolved)
+
+        if skipped:
+            self.logger.warning(
+                f"{skipped} épisode(s) non enregistrés (tous les liens ont échoué), "
+                f"ils seront retentés au prochain scan"
+            )
+
+        if any(ep is not None for ep in all_episodes):
             self.save_episodes_to_db(all_episodes)
-        else:
+        elif not all_episodes:
             self.logger.warning("Aucun épisode trouvé dans les fichiers")
+
+        # Retour progressif à la vitesse normale si cet anime n'a pas été limité
+        if made_requests and not self._rate_limited:
+            type(self)._delay_multiplier = max(1.0, type(self)._delay_multiplier / 2)
 
         # Pause entre chaque anime (seulement si on a vraiment tapé sur l'API)
         if made_requests:
-            delay = random.uniform(*self.ANIME_DELAY)
+            delay = random.uniform(*self.ANIME_DELAY) * type(self)._delay_multiplier
             self.logger.info(f"Pause de {delay:.1f}s avant le prochain anime")
             time.sleep(delay)
 
@@ -1149,6 +1213,8 @@ class get_anime_episodes_url:
         season_number = self.season_name.replace("season", "").strip()
 
         for i, ep_urls in enumerate(episodes):
+            if ep_urls is None:  # tous les liens ont échoué : retenté au prochain scan
+                continue
             episode_num = str(i + 1).zfill(2)
             episode_name = f"{self.serie_name} s{season_number} {episode_num}.mp4"
             # Même format qu'avant : une entrée par domaine de la whitelist, dans le même ordre
