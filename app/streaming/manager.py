@@ -566,10 +566,10 @@ class anime_sama:
             for current_season in range(1, nombre_parts + 1):
                 if current_season == 1:
                     # Si c'est la première itération, utiliser juste saison{base} (sans -1)
-                    url = f"{self.anime_sama_base_url}/catalogue/{name}/saison{season_base}/{langage}/episodes.js"
+                    url = f"{self.anime_sama_base_url}/catalogue/{name}/saison{season_base}/{langage}/"
                 else:
                     # Sinon, utiliser saison{base}-{current_season}
-                    url = f"{self.anime_sama_base_url}/catalogue/{name}/saison{season_base}-{current_season}/{langage}/episodes.js"
+                    url = f"{self.anime_sama_base_url}/catalogue/{name}/saison{season_base}-{current_season}/{langage}/"
                 # Ajouter à la liste avec un numéro (1, 2, 3, etc.)
                 url_list.append(url)
             return url_list
@@ -601,7 +601,7 @@ class anime_sama:
                     else:
                         self.logger.debug(f"Erreur lors du téléchargement du fichier JS pour {file_name} - {season} - {langage}")
             else:
-                url = f"{self.anime_sama_base_url}/catalogue/{file_name}/saison{season}/{langage}/episodes.js"
+                url = f"{self.anime_sama_base_url}/catalogue/{file_name}/saison{season}/{langage}/"
                 status = anime_sama_api.get_episode_js(file_name, url, episode_js)
                 if status == False:
                     self.logger.debug(f"Erreur lors du téléchargement du fichier JS pour {file_name} - {season} - {langage}")

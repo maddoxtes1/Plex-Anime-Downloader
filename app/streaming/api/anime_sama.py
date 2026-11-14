@@ -2,6 +2,9 @@ import os
 from webbrowser import get
 import requests
 import re
+import json
+import time
+import random
 from urllib.parse import urlparse, urljoin
 from collections import Counter
 from bs4 import BeautifulSoup
@@ -462,129 +465,135 @@ def get_anime_details(name):
         logger.debug(traceback.format_exc())
         return None
 
+BDD_SCRIPT_PATTERN = re.compile(
+    r'<script[^>]*data-source=["\']bdd["\'][^>]*>(.*?)</script>',
+    re.DOTALL | re.IGNORECASE,
+)
+
+BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+)
+
+
+# ----------------------------------------------------------------------------
+# Helpers HTTP (partagés par les deux)
+# ----------------------------------------------------------------------------
+def load_flaresolver_config():
+    config_path = FolderConfig.find_path(file_name="config.conf")
+    config = ConfigParser(allow_no_value=True)
+    config.read(config_path, encoding="utf-8")
+    return {
+        "use": config.get("flaresolver", "use_flaresolver", fallback="true").strip().lower() == "true",
+        "host": config.get("flaresolver", "host", fallback="flaresolver"),
+        "port": config.get("flaresolver", "port", fallback="8191"),
+    }
+
+
+def _strip_flaresolver_wrapper(body):
+    """Flaresolver enveloppe parfois du texte/JSON brut dans <html><body><pre>...</pre>."""
+    match = re.search(r"<pre[^>]*>(.*?)</pre>", body, re.DOTALL | re.IGNORECASE)
+    return match.group(1).strip() if match else body
+
+
+def http_get_text(url, referer, logger, fs_conf, is_html=True, force_flaresolver=False):
+    """
+    GET direct, puis Flaresolver en secours (403 / erreur / Cloudflare).
+    Avec force_flaresolver=True, saute la requête directe.
+    Retourne le texte de la réponse ou None.
+    """
+    headers = {"User-Agent": BROWSER_UA, "Referer": referer, "Accept": "*/*"}
+
+    # 1) Requête directe
+    if not force_flaresolver:
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+            if response.status_code == 403:
+                logger.warning(f"Requête directe bloquée (403) : {url}")
+            else:
+                response.raise_for_status()
+                return response.text
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Requête directe échouée ({e}) : {url}")
+
+    # 2) Flaresolver
+    if not fs_conf["use"]:
+        logger.error("Requête directe échouée et Flaresolver désactivé.")
+        return None
+
+    try:
+        r = requests.post(
+            f"http://{fs_conf['host']}:{fs_conf['port']}/v1",
+            headers={"Content-Type": "application/json"},
+            json={"cmd": "request.get", "url": url, "maxTimeout": 120000, "returnOnlyCookies": False},
+            timeout=130,
+        )
+        r.raise_for_status()
+        solution = r.json().get("solution", {})
+        body = solution.get("response")
+        if body is None:
+            logger.error("Réponse Flaresolver sans contenu.")
+            return None
+        return body if is_html else _strip_flaresolver_wrapper(body)
+    except Exception as e:
+        logger.error(f"Erreur Flaresolver : {e}")
+        return None
+
+
+# ----------------------------------------------------------------------------
+# 1) Téléchargement de la page + extraction du <script data-source="bdd">
+# ----------------------------------------------------------------------------
 def get_episode_js(anime_name, anime_url, episode_js):
     """
-    Télécharge un fichier JavaScript contenant les URLs des épisodes depuis une URL donnée.
-
-    Cette fonction récupère le contenu d'un fichier JS depuis anime-sama et le sauvegarde
-    localement pour traitement ultérieur. Le fichier contient généralement des variables
-    JavaScript avec des tableaux d'URLs pour chaque épisode.
+    Récupère la page d'une saison anime-sama et sauvegarde le contenu du
+    <script data-source="bdd"> (variables epsX, epsMeta, epsJeton) dans `episode_js`.
 
     Args:
-        anime_name (str): Nom de l'anime (utilisé pour les logs)
-        anime_url (str): URL complète du fichier JS à télécharger
-        episode_js (str): Chemin local où sauvegarder le fichier JS téléchargé
+        anime_name (str): Nom de l'anime (logs)
+        anime_url (str): URL de la page, ex:
+            https://anime-sama.to/catalogue/firefly-wedding/saison1/vostfr/
+        episode_js (str): Chemin local où sauvegarder le contenu du script
 
     Returns:
-        bool: True si le téléchargement et la sauvegarde ont réussi, False sinon
-
-    Exemple:
-        >>> get_episode_js(
-        ...     anime_name="Naruto",
-        ...     anime_url="https://anime-sama.tv/episodes/naruto.js",
-        ...     episode_js="/path/to/naruto-episodes.js"
-        ... )
-        True
+        bool: True si le script a été trouvé et sauvegardé, False sinon
     """
     logger = universal_logger(name="Anime-sama - Download JS", log_file="anime-sama.log")
 
     try:
-        # Récupérer la configuration de Flaresolver
-        config_path = FolderConfig.find_path(file_name="config.conf")
-        config = ConfigParser(allow_no_value=True)
-        config.read(config_path, encoding='utf-8')
-        flaresolver_use = config.get("flaresolver", "use_flaresolver", fallback="true").strip().lower()
-        flaresolver_host = config.get("flaresolver", "host", fallback="flaresolver")
-        flaresolver_port = config.get("flaresolver", "port", fallback="8191")
+        fs_conf = load_flaresolver_config()
+        logger.debug(f"Téléchargement de la page pour '{anime_name}' : {anime_url}")
 
-        logger.debug(f"Téléchargement du fichier JS pour '{anime_name}' depuis: {anime_url}")
-        logger.debug(f"Destination: {episode_js}")
-
-        # Définir les headers et data pour Flaresolver
-        data_cloudflare = {
-            "cmd": "request.get",
-            "url": anime_url,
-            "maxTimeout": 120000,
-            "returnOnlyCookies": False
-        }
-        header_url = anime_url.removesuffix("episodes.js")
-        logger.debug(f"header url {header_url}")
-        headers_flaresolver = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Referer": header_url
-        }
-
-        raw_content = None
-
-        # Tentative de requête directe
-        try:
-            response = requests.get(anime_url, stream=True, headers=headers_flaresolver, timeout=30)
-            if response.status_code == 403:
-                logger.warning("Requête directe bloquée par Cloudflare (403). Tentative avec Flaresolver si activé.")
-            else:
-                response.raise_for_status()
-                raw_content = response.iter_content(chunk_size=8192)
-                logger.debug("Requête directe réussie.")
-        except requests.exceptions.RequestException as e:
-            logger.warning(f"La requête directe a échoué ({e}). Tentative avec Flaresolver si activé.")
-
-        # Si la requête directe a échoué ou a été bloquée par Cloudflare, essayer Flaresolver
-        if raw_content is None and flaresolver_use == "true":
-            logger.debug("Tentative de récupération via Flaresolver.")
-            try:
-                response_flaresolver = requests.post(f"http://{flaresolver_host}:{flaresolver_port}/v1", headers=headers_flaresolver, json=data_cloudflare, timeout=130)
-                response_flaresolver.raise_for_status()
-                flaresolver_json_response = response_flaresolver.json()
-                if 'solution' in flaresolver_json_response and 'response' in flaresolver_json_response['solution']:
-                    # Flaresolver retourne le contenu en texte, pas en stream
-                    raw_content = [flaresolver_json_response['solution']['response'].encode('utf-8')] # Encoder pour l'écriture binaire
-                    logger.debug("Flaresolver a récupéré le contenu avec succès.")
-                else:
-                    logger.error("Réponse de Flaresolver ne contient pas le contenu attendu.")
-                    return False # Retourne False si le contenu n'est pas trouvé
-            except Exception as e:
-                logger.error(f"Erreur lors de la requête via Flaresolver : {e}")
-                return False # Retourne False en cas d'erreur Flaresolver
-        elif raw_content is None and flaresolver_use != "true":
-            logger.error("La requête directe a échoué et Flaresolver est désactivé. Impossible de télécharger le fichier JS.")
+        html = http_get_text(anime_url, referer=anime_url, logger=logger, fs_conf=fs_conf)
+        if not html:
+            logger.error(f"Impossible de récupérer la page pour '{anime_name}'.")
             return False
 
-        if raw_content is None:
-            logger.error("Aucun contenu n'a pu être récupéré après toutes les tentatives.")
+        match = BDD_SCRIPT_PATTERN.search(html)
+        if not match:
+            logger.error(f"Balise <script data-source=\"bdd\"> introuvable pour '{anime_name}'.")
             return False
 
-        # Sauvegarder le contenu dans le fichier
-        with open(episode_js, 'wb') as file:
-            # Utiliser iter_content ou le contenu encodé de Flaresolver
-            if isinstance(raw_content, list): # Si Flaresolver a retourné une liste (encodée)
-                for chunk in raw_content:
-                    file.write(chunk)
-            else: # Si la requête directe a fonctionné (iter_content)
-                for chunk in raw_content:
-                    if chunk: # Filtrer les chunks vides
-                        file.write(chunk)
+        script_content = match.group(1).strip()
+        if "epsJeton" not in script_content:
+            logger.error(f"Le script trouvé ne contient pas epsJeton pour '{anime_name}'.")
+            return False
 
-        # Vérifier que le fichier a bien été créé et n'est pas vide
-        if os.path.exists(episode_js) and os.path.getsize(episode_js) > 0:
-            file_size = os.path.getsize(episode_js)
-            logger.debug(f"Fichier JS téléchargé avec succès pour '{anime_name}' ({file_size} octets)")
-            logger.debug(f"Fichier sauvegardé dans: {episode_js}")
+        with open(episode_js, "w", encoding="utf-8") as f:
+            f.write(script_content)
+
+        if os.path.getsize(episode_js) > 0:
+            logger.debug(f"Script sauvegardé pour '{anime_name}' ({os.path.getsize(episode_js)} octets)")
             return True
-        else:
-            logger.warning(f"Le fichier JS pour '{anime_name}' a été créé mais est vide")
-            return False
 
-    except IOError as e:
-        logger.error(f"Erreur d'écriture lors de la sauvegarde du fichier JS pour '{anime_name}': {e}")
-        logger.debug(f"Chemin: {episode_js}")
+        logger.warning(f"Le fichier pour '{anime_name}' est vide")
         return False
 
+    except IOError as e:
+        logger.error(f"Erreur d'écriture pour '{anime_name}' : {e}")
+        return False
     except Exception as e:
-        logger.error(f"Erreur inattendue lors du téléchargement pour '{anime_name}': {e}")
-        logger.debug(f"Type d'erreur: {type(e).__name__}")
         import traceback
+        logger.error(f"Erreur inattendue pour '{anime_name}' : {e}")
         logger.debug(traceback.format_exc())
         return False
 
@@ -927,61 +936,36 @@ def search_anime(value):
 
 class get_anime_episodes_url:
     """
-    Classe unifiée pour extraire et sauvegarder les épisodes d'anime depuis des fichiers JavaScript.
+    Extrait les épisodes d'un (ou plusieurs) script(s) anime-sama et les sauvegarde en DB.
 
-    Cette classe combine les fonctionnalités de traitement d'un seul fichier JS ou de plusieurs fichiers JS
-    en une seule interface. Elle détecte automatiquement le type d'entrée et applique la logique appropriée.
-
-    Fonctionnalités principales :
-    - Extraction des URLs d'épisodes depuis des fichiers JavaScript contenant des variables avec des tableaux d'URLs
-    - Filtrage par domaine selon une whitelist (video.sibnet.ru, oneupload.to, vidmoly.to, sendvid.com)
-    - Combinaison automatique de plusieurs fichiers JS avec numérotation continue des épisodes
-    - Sauvegarde dans la base de données avec gestion du statut des épisodes existants
+    Fonctionnement :
+        - epsN = un lecteur (source), l'index dans le tableau = le numéro d'épisode
+          (index 0 -> épisode 1, etc.). Chaque entrée est "lien:ID" (ou "" si absent).
+        - epsMeta associe chaque ID à son domaine : {"78928": ["ansembed.net"], ...}
+        - Si le domaine n'est pas dans la whitelist -> ignoré (donne "none").
+        - Pour chaque ID retenu : GET /api/lien.php?j={epsJeton}&l={ID} -> URL réelle.
 
     Args:
-        path_list (tuple): Tuple contenant (path_name, serie_name, season_name)
-            - path_name: Chemin de base pour la série
-            - serie_name: Nom de la série
-            - season_name: Nom de la saison (ex: "season1")
-
-        episode_js_or_list (str | list): Soit un chemin vers un fichier JS (str), soit une liste de chemins (list)
-            - Si str: Traite un seul fichier JS contenant les URLs des épisodes
-            - Si list: Combine tous les fichiers JS de la liste avec une numérotation continue des épisodes
-
-    Processus de traitement :
-        1. Initialise la série et la saison dans la base de données
-        2. Détecte automatiquement si episode_js_or_list est une liste ou un seul fichier
-        3. Pour chaque fichier JS :
-           - Lit le contenu et extrait les variables JavaScript avec pattern: var nom = [url1, url2, ...];
-           - Identifie le domaine le plus fréquent pour chaque variable
-           - Filtre les URLs selon la whitelist de domaines autorisés
-           - Remplace les URLs de domaines non autorisés par "none"
-        4. Combine les épisodes de tous les fichiers (si liste) avec numérotation continue (01, 02, 03, ...)
-        5. Sauvegarde chaque épisode dans la base de données :
-           - Format du nom: "{serie_name} s{season_number} {episode_num}.mp4"
-           - Préserve le statut existant si l'épisode existe déjà
-           - Crée un nouvel épisode avec statut "not_downloaded" si inexistant
-
-    Exemple d'utilisation :
-        # Traiter un seul fichier
-        get_anime_episodes(
-            path_list=("path/to/serie", "Naruto", "season1"),
-            episode_js_or_list="/path/to/episodes.js"
-        )
-
-        # Traiter plusieurs fichiers (parties)
-        get_anime_episodes(
-            path_list=("path/to/serie", "Naruto", "season1"),
-            episode_js_or_list=["/path/to/part1.js", "/path/to/part2.js", "/path/to/part3.js"]
-        )
-
-    Note:
-        Les fichiers JS vides ou contenant uniquement des commentaires multi-lignes sont ignorés.
-        Les domaines non présents dans la whitelist sont remplacés par "none".
+        path_list (tuple): (path_name, serie_name, season_name)
+        episode_js_or_list (str | list): fichier du script, ou liste de fichiers
+            (parties combinées avec numérotation continue des épisodes)
     """
+
+    API_URL = "https://anime-sama.to/api/lien.php"
+
+    # Pauses "réalistes" (en secondes, tirées au hasard dans l'intervalle)
+    REQUEST_DELAY = (1.0, 2)  # entre chaque appel à lien.php (dans un même anime)
+    ANIME_DELAY = (3.0, 5.0)    # entre chaque anime
+
     def __init__(self, path_list, episode_js_or_list):
         self.logger = universal_logger(name="Anime-sama", log_file="anime-sama.log")
-        self.whitelist = ['video.sibnet.ru', 'vidmoly.to','vidmoly.biz','vidmoly.org','vidmoly.me','ansembed.net','oneupload.to','sendvid.com','uqload.vc','uqload.is','callistanise.com','minochinos.com']
+        self.whitelist = [
+            'video.sibnet.ru', 'vidmoly.to', 'vidmoly.biz', 'vidmoly.org', 'vidmoly.me',
+            'ansembed.net', 'oneupload.to', 'sendvid.com', 'uqload.vc', 'uqload.is',
+            'callistanise.com', 'minochinos.com',
+        ]
+        self.fs_conf = load_flaresolver_config()
+        self._logged_api_sample = False
 
         path_name, serie_name, season_name = path_list
         self.path_name = path_name
@@ -992,133 +976,187 @@ class get_anime_episodes_url:
         db.add_series(path_name, serie_name)
         db.add_season(path_name, serie_name, season_name)
 
-        # Détecter si c'est une liste ou un seul fichier
-        if isinstance(episode_js_or_list, list):
-            # Traiter plusieurs fichiers (ancien extract_all_part_episode)
-            self.combine_all_episodes(episode_js_or_list)
-        else:
-            # Traiter un seul fichier (ancien extract_link)
-            self.process_single_file(episode_js_or_list)
+        files = episode_js_or_list if isinstance(episode_js_or_list, list) else [episode_js_or_list]
+        self.process_files(files)
 
-    def convert_js_to_urls(self, episode_js):
-        """Extrait les URLs d'un fichier episode_js"""
+    # --- Parsing du script -------------------------------------------------
+    def parse_script(self, episode_js):
+        """
+        Retourne (jeton, episodes) où episodes est une liste (1 élément par épisode)
+        de dicts {domaine_whitelist: id_lien}. None si rien d'exploitable.
+        """
         try:
-            with open(episode_js, "r", encoding="utf-8") as js_file:
-                js_content = js_file.read()
+            with open(episode_js, "r", encoding="utf-8") as f:
+                content = f.read()
         except FileNotFoundError:
             self.logger.warning(f"Fichier {episode_js} non trouvé")
             return None
 
-        if js_content.strip().startswith("/*") and js_content.strip().endswith("*/"):
-            self.logger.debug(msg="Le fichier est un commentaire multi-ligne. Ignoré.")
+        if not content.strip():
+            self.logger.warning(f"Fichier {episode_js} vide")
             return None
 
-        pattern = r"var\s+(\w+)\s*=\s*\[([^\]]+)\];"
-        matches = re.findall(pattern, js_content)
-
-        data = {}
-        for variable_name, urls in matches:
-            urls_list = [
-                url.strip().strip("'").strip('"')
-                for url in urls.split(",")
-                if url.strip() and not url.startswith("'")
-            ]
-
-            if not urls_list:
-                self.logger.debug(msg=f"La variable {variable_name} est vide.")
-                continue
-
-            numbered_urls = {str(i + 1): url for i, url in enumerate(urls_list)}
-            data[variable_name] = numbered_urls
-
-        if not data:
-            self.logger.info(msg=f"le fichier.js est vide (surment a cause que l'anime est pas encore sortie)")
+        jeton_match = re.search(r'var\s+epsJeton\s*=\s*["\']([^"\']+)["\']', content)
+        meta_match = re.search(r'var\s+epsMeta\s*=\s*(\{.*?\})\s*;', content, re.DOTALL)
+        if not jeton_match or not meta_match:
+            self.logger.warning("epsJeton ou epsMeta introuvable dans le fichier.")
             return None
 
-        # Mise à jour des domaines
-        def extract_domain(url):
-            domain = urlparse(url).netloc
-            return domain
+        jeton = jeton_match.group(1)
+        try:
+            meta = json.loads(meta_match.group(1))
+        except json.JSONDecodeError as e:
+            self.logger.error(f"epsMeta illisible : {e}")
+            return None
 
-        updates = []
-        for var_name, eps in data.items():
-            domains = [extract_domain(url) for url in eps.values()]
-            domain_counts = Counter(domains)
-            most_common_domain, _ = domain_counts.most_common(1)[0]
+        # Tous les epsN (eps1, eps2, ...) dans l'ordre numérique
+        eps_vars = []
+        for m in re.finditer(r'var\s+eps(\d+)\s*=\s*(\[.*?\])\s*;', content, re.DOTALL):
+            try:
+                eps_vars.append((int(m.group(1)), json.loads(m.group(2))))
+            except json.JSONDecodeError:
+                self.logger.warning(f"eps{m.group(1)} illisible, ignoré.")
+        eps_vars.sort(key=lambda x: x[0])
 
-            for key, url in eps.items():
-                if extract_domain(url) != most_common_domain:
-                    eps[key] = "none"
+        if not eps_vars:
+            self.logger.info("Aucune variable epsN (l'anime n'est probablement pas encore sorti).")
+            return None
 
-            updates.append((var_name, most_common_domain, eps))
+        nb_episodes = max(len(arr) for _, arr in eps_vars)
+        episodes = [{} for _ in range(nb_episodes)]
 
-        data_with_domains = {}
-        for old_var_name, most_common_domain, eps in updates:
-            data_with_domains[most_common_domain] = eps
+        for _, arr in eps_vars:
+            for idx, entry in enumerate(arr):
+                if not entry:
+                    continue
+                link_id = entry.split(":", 1)[-1].strip()
+                info = meta.get(link_id)
+                if not info:
+                    continue
+                domain = info[0]
+                if domain not in self.whitelist:
+                    continue  # -> restera "none"
+                # Un seul lien par domaine et par épisode (le premier rencontré)
+                episodes[idx].setdefault(domain, link_id)
 
-        # Conversion finale des données
-        domain_urls = {domain: [] for domain in self.whitelist}
+        return jeton, episodes
 
-        for domain in self.whitelist:
-            if domain in data_with_domains:
-                domain_urls[domain] = list(data_with_domains[domain].values())
+    # --- Résolution d'un ID en URL ----------------------------------------
+    def _extract_url(self, body):
+        """Gère une réponse JSON ou texte brut."""
+        body = body.strip()
+        try:
+            data = json.loads(body)
+            if isinstance(data, str):
+                return data
+            if isinstance(data, dict):
+                # Format réel de l'API : {"u": "https://..."}
+                for key in ("u", "url", "lien", "link", "src"):
+                    if isinstance(data.get(key), str) and data[key].startswith("http"):
+                        return data[key]
+                # Fallback : première valeur qui ressemble à une URL
+                for value in data.values():
+                    if isinstance(value, str) and value.startswith("http"):
+                        return value
+            if isinstance(data, list) and data and isinstance(data[0], str):
+                return data[0]
+        except json.JSONDecodeError:
+            pass
+        body = body.strip('"\'')
+        return body if body.startswith("http") else None
 
-        return domain_urls
+    def _api_error(self, body):
+        """Retourne le message d'erreur si la réponse est {"erreur": "..."}, sinon None."""
+        try:
+            data = json.loads(body.strip())
+        except json.JSONDecodeError:
+            return None
+        if isinstance(data, dict) and "erreur" in data:
+            return str(data["erreur"])
+        return None
 
-    def combine_all_episodes(self, episode_js_list):
-        """Combine tous les épisodes de tous les fichiers avec une numérotation continue"""
-        all_combined_urls = {domain: [] for domain in self.whitelist}
+    def resolve_link(self, jeton, link_id, referer):
+        url = f"{self.API_URL}?j={jeton}&l={link_id}"
 
-        # Extraire et combiner les URLs de tous les fichiers
+        body = http_get_text(url, referer=referer, logger=self.logger, fs_conf=self.fs_conf, is_html=False)
+        if not body:
+            return "none"
+
+        error = self._api_error(body)
+        if error:
+            # Une seule seconde chance : on réessaie via Flaresolver, puis on abandonne
+            self.logger.warning(f"API a répondu '{error}' pour l'id {link_id}, tentative via Flaresolver.")
+            if not self.fs_conf["use"]:
+                return "none"
+            body = http_get_text(
+                url, referer=referer, logger=self.logger, fs_conf=self.fs_conf,
+                is_html=False, force_flaresolver=True,
+            )
+            if not body or self._api_error(body):
+                self.logger.error(f"Échec pour l'id {link_id}, on continue.")
+                return "none"
+
+        if not self._logged_api_sample:  # utile pour ajuster le parsing si besoin
+            self.logger.debug(f"Exemple de réponse API : {body[:200]}")
+            self._logged_api_sample = True
+
+        resolved = self._extract_url(body)
+        if not resolved:
+            self.logger.warning(f"Réponse API inattendue pour l'id {link_id} : {body[:100]}")
+            return "none"
+        return resolved
+
+    # --- Traitement --------------------------------------------------------
+    def process_files(self, episode_js_list):
+        all_episodes = []  # liste de {domaine: url}, numérotation continue entre fichiers
+        made_requests = False
+
         for episode_js in episode_js_list:
-            domain_urls = self.convert_js_to_urls(episode_js)
-            if domain_urls is None:
+            parsed = self.parse_script(episode_js)
+            if parsed is None:
                 continue
+            jeton, episodes = parsed
 
-            # Combiner les URLs de ce fichier avec celles déjà extraites
-            for domain in self.whitelist:
-                if domain_urls[domain]:
-                    all_combined_urls[domain].extend(domain_urls[domain])
+            referer = "https://anime-sama.to/"
+            total_links = sum(len(ep) for ep in episodes)
+            self.logger.info(
+                f"Récupération de {total_links} liens pour {self.serie_name} - {self.season_name} "
+                f"({len(episodes)} épisodes)"
+            )
+            for ep in episodes:
+                resolved = {}
+                for domain, link_id in ep.items():
+                    resolved[domain] = self.resolve_link(jeton, link_id, referer)
+                    made_requests = True
+                    delay = random.uniform(*self.REQUEST_DELAY)
+                    self.logger.debug(f"Pause de {delay:.1f}s avant le prochain lien")
+                    time.sleep(delay)  # pause entre chaque lien
+                all_episodes.append(resolved)
 
-        # Trouver la longueur maximale (nombre total d'épisodes combinés)
-        max_length = max(len(urls) for urls in all_combined_urls.values()) if any(all_combined_urls.values()) else 0
-
-        if max_length == 0:
+        if all_episodes:
+            self.save_episodes_to_db(all_episodes)
+        else:
             self.logger.warning("Aucun épisode trouvé dans les fichiers")
-            return
 
-        # Ajouter tous les épisodes à la base de données avec numérotation continue
-        self.save_episodes_to_db(all_combined_urls, max_length)
+        # Pause entre chaque anime (seulement si on a vraiment tapé sur l'API)
+        if made_requests:
+            delay = random.uniform(*self.ANIME_DELAY)
+            self.logger.info(f"Pause de {delay:.1f}s avant le prochain anime")
+            time.sleep(delay)
 
-    def process_single_file(self, episode_js):
-        """Traite un seul fichier JS"""
-        domain_urls = self.convert_js_to_urls(episode_js)
-        if domain_urls is None:
-            return
-
-        max_length = max(len(urls) for urls in domain_urls.values()) if any(domain_urls.values()) else 0
-        if max_length == 0:
-            self.logger.warning("Aucun épisode trouvé dans le fichier")
-            return
-
-        self.save_episodes_to_db(domain_urls, max_length)
-
-    def save_episodes_to_db(self, domain_urls, max_length):
-        """Sauvegarde les épisodes dans la base de données"""
+    def save_episodes_to_db(self, episodes):
         db = anime_data_database()
-        for i in range(max_length):
-            episode_num = str(i + 1).zfill(2)
-            season_number = self.season_name.replace("season", "").strip()
-            episode_name = f"{self.serie_name} s{season_number} {episode_num}.mp4"
-            episode_urls = [
-                urls[i] if i < len(urls) else "none"
-                for domain, urls in domain_urls.items()
-            ]
+        season_number = self.season_name.replace("season", "").strip()
 
-            current_status = "not_downloaded"
+        for i, ep_urls in enumerate(episodes):
+            episode_num = str(i + 1).zfill(2)
+            episode_name = f"{self.serie_name} s{season_number} {episode_num}.mp4"
+            # Même format qu'avant : une entrée par domaine de la whitelist, dans le même ordre
+            episode_urls = [ep_urls.get(domain, "none") for domain in self.whitelist]
+
             db.add_episode(
                 path_name=self.path_name,
                 series_name=self.serie_name,
                 season_name=self.season_name,
-                episode_list=(episode_name, current_status, episode_urls)
+                episode_list=(episode_name, "not_downloaded", episode_urls),
             )
